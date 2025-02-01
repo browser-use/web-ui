@@ -37,7 +37,7 @@ def get_env_value(key, provider):
     env_mappings = {
         "openai": {"api_key": "OPENAI_API_KEY", "base_url": "OPENAI_ENDPOINT"},
         "azure_openai": {"api_key": "AZURE_OPENAI_API_KEY", "base_url": "AZURE_OPENAI_ENDPOINT"},
-        "gemini": {"api_key": "GOOGLE_API_KEY"},
+        "google": {"api_key": "GOOGLE_API_KEY"},
         "deepseek": {"api_key": "DEEPSEEK_API_KEY", "base_url": "DEEPSEEK_ENDPOINT"}
     }
 
@@ -91,9 +91,9 @@ def test_openai_model():
     config = LLMConfig(provider="openai", model_name="gpt-4o")
     test_llm(config, "Describe this image", "assets/examples/test.png")
 
-def test_gemini_model():
+def test_google_model():
     # Enable your API key first if you haven't: https://ai.google.dev/palm_docs/oauth_quickstart
-    config = LLMConfig(provider="gemini", model_name="gemini-2.0-flash-exp")
+    config = LLMConfig(provider="google", model_name="gemini-2.0-flash-exp")
     test_llm(config, "Describe this image", "assets/examples/test.png")
 
 def test_azure_openai_model():
@@ -118,7 +118,7 @@ def test_deepseek_r1_ollama_model():
 
 if __name__ == "__main__":
     # test_openai_model()
-    # test_gemini_model()
+    # test_google_model()
     # test_azure_openai_model()
     test_deepseek_model()
     # test_ollama_model()

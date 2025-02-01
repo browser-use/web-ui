@@ -127,7 +127,7 @@ async def test_browser_use_custom():
     )
 
     # llm = utils.get_llm_model(
-    #     provider="gemini",
+    #     provider="google",
     #     model_name="gemini-2.0-flash-exp",
     #     temperature=1.0,
     #     api_key=os.getenv("GOOGLE_API_KEY", "")
