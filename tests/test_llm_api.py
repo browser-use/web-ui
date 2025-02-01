@@ -38,7 +38,8 @@ def get_env_value(key, provider):
         "openai": {"api_key": "OPENAI_API_KEY", "base_url": "OPENAI_ENDPOINT"},
         "azure_openai": {"api_key": "AZURE_OPENAI_API_KEY", "base_url": "AZURE_OPENAI_ENDPOINT"},
         "gemini": {"api_key": "GOOGLE_API_KEY"},
-        "deepseek": {"api_key": "DEEPSEEK_API_KEY", "base_url": "DEEPSEEK_ENDPOINT"}
+        "deepseek": {"api_key": "DEEPSEEK_API_KEY", "base_url": "DEEPSEEK_ENDPOINT"},
+        "mistral": {"api_key": "MISTRAL_API_KEY", "base_url": "MISTRAL_ENDPOINT"},
     }
 
     if provider in env_mappings and key in env_mappings[provider]:
@@ -116,11 +117,16 @@ def test_deepseek_r1_ollama_model():
     config = LLMConfig(provider="ollama", model_name="deepseek-r1:14b")
     test_llm(config, "How many 'r's are in the word 'strawberry'?")
 
+def test_mistral_model():
+    config = LLMConfig(provider="mistral", model_name="pixtral-large-latest")
+    test_llm(config, "Describe this image", "assets/examples/test.png")
+
 if __name__ == "__main__":
     # test_openai_model()
     # test_gemini_model()
     # test_azure_openai_model()
-    test_deepseek_model()
+    #test_deepseek_model()
     # test_ollama_model()
     # test_deepseek_r1_model()
     # test_deepseek_r1_ollama_model()
+    test_mistral_model()
