@@ -24,7 +24,7 @@ from .custom_prompts import CustomAgentMessagePrompt
 logger = logging.getLogger(__name__)
 
 
-class CustomMassageManager(MessageManager):
+class CustomMessageManager(MessageManager):
     def __init__(
             self,
             llm: BaseChatModel,
