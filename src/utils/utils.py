@@ -74,7 +74,7 @@ def get_llm_model(provider: str, **kwargs):
         return ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
-            google_api_key=api_key,
+            api_key=api_key,
         )
     elif provider == "ollama":
         num_ctx = kwargs.get("num_ctx", 32000)
