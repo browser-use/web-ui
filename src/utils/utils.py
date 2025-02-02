@@ -36,7 +36,7 @@ def get_llm_model(provider: str, **kwargs):
 
     if provider == "anthropic":
         return ChatAnthropic(
-            model_name=model_name,
+            model=model_name,
             temperature=temperature,
             base_url=base_url,
             api_key=api_key,
