@@ -34,7 +34,7 @@ from langchain_core.messages import (
 from json_repair import repair_json
 from src.utils.agent_state import AgentState
 
-from .custom_massage_manager import CustomMassageManager
+from .custom_message_manager import CustomMessageManager
 from .custom_views import CustomAgentOutput, CustomAgentStepInfo
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ class CustomAgent(Agent):
         # agent_state for Stop
         self.agent_state = agent_state
         self.agent_prompt_class = agent_prompt_class
-        self.message_manager = CustomMassageManager(
+        self.message_manager = CustomMessageManager(
             llm=self.llm,
             task=self.task,
             action_descriptions=self.controller.registry.get_prompt_description(),
