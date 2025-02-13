@@ -11,6 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 import gradio as gr
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from .llm import DeepSeekR1ChatOpenAI, DeepSeekR1ChatOllama
 
@@ -29,6 +30,15 @@ def get_llm_model(provider: str, **kwargs):
     :param kwargs:
     :return:
     """
+    rate_limit_rps = kwargs.get("rate_limit_rps", 1.0)
+    rate_limit_bucket = kwargs.get("rate_limit_bucket", 10)
+    # Create rate limiter
+    rate_limiter = InMemoryRateLimiter(
+        requests_per_second=rate_limit_rps,
+        check_every_n_seconds=0.1,
+        max_bucket_size=rate_limit_bucket
+    )
+
     if provider not in ["ollama"]:
         env_var = f"{provider.upper()}_API_KEY"
         api_key = kwargs.get("api_key", "") or os.getenv(env_var, "")
@@ -47,6 +57,7 @@ def get_llm_model(provider: str, **kwargs):
             temperature=kwargs.get("temperature", 0.0),
             base_url=base_url,
             api_key=api_key,
+            rate_limiter=rate_limiter,
         )
     elif provider == 'mistral':
         if not kwargs.get("base_url", ""):
@@ -63,6 +74,7 @@ def get_llm_model(provider: str, **kwargs):
             temperature=kwargs.get("temperature", 0.0),
             base_url=base_url,
             api_key=api_key,
+            rate_limiter=rate_limiter,
         )
     elif provider == "openai":
         if not kwargs.get("base_url", ""):
@@ -75,6 +87,7 @@ def get_llm_model(provider: str, **kwargs):
             temperature=kwargs.get("temperature", 0.0),
             base_url=base_url,
             api_key=api_key,
+            rate_limiter=rate_limiter,
         )
     elif provider == "deepseek":
         if not kwargs.get("base_url", ""):
@@ -88,19 +101,24 @@ def get_llm_model(provider: str, **kwargs):
                 temperature=kwargs.get("temperature", 0.0),
                 base_url=base_url,
                 api_key=api_key,
+                rate_limiter=rate_limiter,
             )
         else:
+
             return ChatOpenAI(
                 model=kwargs.get("model_name", "deepseek-chat"),
                 temperature=kwargs.get("temperature", 0.0),
                 base_url=base_url,
                 api_key=api_key,
+                rate_limiter=rate_limiter,
             )
     elif provider == "google":
+
         return ChatGoogleGenerativeAI(
             model=kwargs.get("model_name", "gemini-2.0-flash-exp"),
             temperature=kwargs.get("temperature", 0.0),
             google_api_key=api_key,
+            rate_limiter=rate_limiter,
         )
     elif provider == "ollama":
         if not kwargs.get("base_url", ""):
@@ -109,19 +127,23 @@ def get_llm_model(provider: str, **kwargs):
             base_url = kwargs.get("base_url")
 
         if "deepseek-r1" in kwargs.get("model_name", "qwen2.5:7b"):
+
             return DeepSeekR1ChatOllama(
                 model=kwargs.get("model_name", "deepseek-r1:14b"),
                 temperature=kwargs.get("temperature", 0.0),
                 num_ctx=kwargs.get("num_ctx", 32000),
                 base_url=base_url,
+                rate_limiter=rate_limiter,
             )
         else:
+
             return ChatOllama(
                 model=kwargs.get("model_name", "qwen2.5:7b"),
                 temperature=kwargs.get("temperature", 0.0),
                 num_ctx=kwargs.get("num_ctx", 32000),
                 num_predict=kwargs.get("num_predict", 1024),
                 base_url=base_url,
+                rate_limiter=rate_limiter,
             )
     elif provider == "azure_openai":
         if not kwargs.get("base_url", ""):
@@ -135,6 +157,7 @@ def get_llm_model(provider: str, **kwargs):
             api_version=api_version,
             azure_endpoint=base_url,
             api_key=api_key,
+            rate_limiter=rate_limiter,
         )
     else:
         raise ValueError(f"Unsupported provider: {provider}")
