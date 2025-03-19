@@ -34,7 +34,7 @@ from src.controller.custom_controller import CustomController
 from gradio.themes import Citrus, Default, Glass, Monochrome, Ocean, Origin, Soft, Base
 from src.utils.default_config_settings import default_config, load_config_from_file, save_config_to_file, \
     save_current_config, update_ui_from_config
-from src.utils.utils import update_model_dropdown, get_latest_files, capture_screenshot
+from src.utils.utils import update_model_dropdown, get_latest_files, capture_screenshot, MissingAPIKeyError
 
 # Global variables for persistence
 _global_browser = None
@@ -245,8 +245,9 @@ async def run_browser_agent(
             gr.update(interactive=True)  # Re-enable run button
         )
 
-    except gr.Error:
-        raise
+    except MissingAPIKeyError as e:
+        logger.error(str(e))
+        raise gr.Error(str(e), print_exception=False)
 
     except Exception as e:
         import traceback

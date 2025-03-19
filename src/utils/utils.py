@@ -10,7 +10,6 @@ from langchain_mistralai import ChatMistralAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
-import gradio as gr
 
 from .llm import DeepSeekR1ChatOpenAI, DeepSeekR1ChatOllama
 
@@ -36,7 +35,7 @@ def get_llm_model(provider: str, **kwargs):
         env_var = f"{provider.upper()}_API_KEY"
         api_key = kwargs.get("api_key", "") or os.getenv(env_var, "")
         if not api_key:
-            handle_api_key_error(provider, env_var)
+            raise MissingAPIKeyError(provider, env_var)
         kwargs["api_key"] = api_key
 
     if provider == "anthropic":
@@ -184,6 +183,7 @@ def update_model_dropdown(llm_provider, api_key=None, base_url=None):
     """
     Update the model name dropdown with predefined models for the selected provider.
     """
+    import gradio as gr
     # Use API keys from .env if not provided
     if not api_key:
         api_key = os.getenv(f"{llm_provider.upper()}_API_KEY", "")
@@ -196,16 +196,12 @@ def update_model_dropdown(llm_provider, api_key=None, base_url=None):
     else:
         return gr.Dropdown(choices=[], value="", interactive=True, allow_custom_value=True)
 
-
-def handle_api_key_error(provider: str, env_var: str):
-    """
-    Handles the missing API key error by raising a gr.Error with a clear message.
-    """
-    provider_display = PROVIDER_DISPLAY_NAMES.get(provider, provider.upper())
-    raise gr.Error(
-        f"💥 {provider_display} API key not found! 🔑 Please set the "
-        f"`{env_var}` environment variable or provide it in the UI."
-    )
+class MissingAPIKeyError(Exception):
+    """Custom exception for missing API key."""
+    def __init__(self, provider: str, env_var: str):
+        provider_display = PROVIDER_DISPLAY_NAMES.get(provider, provider.upper())
+        super().__init__(f"💥 {provider_display} API key not found! 🔑 Please set the "
+                        f"`{env_var}` environment variable or provide it in the UI.")
 
 
 def encode_image(img_path):
