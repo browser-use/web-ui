@@ -12,7 +12,7 @@ from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 import gradio as gr
 
-from .llm import DeepSeekR1ChatOpenAI, DeepSeekR1ChatOllama
+from .llm import DeepSeekR1ChatOpenAI, DeepSeekR1ChatOllama, UnboundChatOpenAI
 
 PROVIDER_DISPLAY_NAMES = {
     "openai": "OpenAI",
@@ -21,7 +21,8 @@ PROVIDER_DISPLAY_NAMES = {
     "deepseek": "DeepSeek",
     "google": "Google",
     "alibaba": "Alibaba",
-    "moonshot": "MoonShot"
+    "moonshot": "MoonShot",
+    "unbound": "Unbound AI"
 }
 
 
@@ -151,13 +152,24 @@ def get_llm_model(provider: str, **kwargs):
             base_url=base_url,
             api_key=api_key,
         )
-
     elif provider == "moonshot":
         return ChatOpenAI(
             model=kwargs.get("model_name", "moonshot-v1-32k-vision-preview"),
             temperature=kwargs.get("temperature", 0.0),
             base_url=os.getenv("MOONSHOT_ENDPOINT"),
             api_key=os.getenv("MOONSHOT_API_KEY"),
+        )
+    elif provider == "unbound":
+        if not kwargs.get("base_url", ""):
+            base_url = os.getenv("UNBOUND_ENDPOINT", "https://api.getunbound.ai")
+        else:
+            base_url = kwargs.get("base_url")
+
+        return UnboundChatOpenAI(
+            model=kwargs.get("model_name", "gpt-4o-mini"),
+            temperature=kwargs.get("temperature", 0.0),
+            base_url=base_url,
+            api_key=api_key,
         )
     else:
         raise ValueError(f"Unsupported provider: {provider}")
@@ -176,6 +188,7 @@ model_names = {
     "mistral": ["mixtral-large-latest", "mistral-large-latest", "mistral-small-latest", "ministral-8b-latest"],
     "alibaba": ["qwen-plus", "qwen-max", "qwen-turbo", "qwen-long"],
     "moonshot": ["moonshot-v1-32k-vision-preview", "moonshot-v1-8k-vision-preview"],
+    "unbound": ["gemini-2.0-flash","gpt-4o-mini", "gpt-4o", "gpt-4.5-preview"]
 }
 
 
