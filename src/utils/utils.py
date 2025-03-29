@@ -182,7 +182,7 @@ model_names = {
 
 
 # Callback to update the model name dropdown based on the selected provider
-def update_model_dropdown(llm_provider, api_key=None, base_url=None):
+def update_model_dropdown(llm_provider, current_model_value, api_key=None, base_url=None):
     """
     Update the model name dropdown with predefined models for the selected provider.
     """
@@ -194,10 +194,13 @@ def update_model_dropdown(llm_provider, api_key=None, base_url=None):
         base_url = os.getenv(f"{llm_provider.upper()}_BASE_URL", "")
 
     # Use predefined models for the selected provider
-    if llm_provider in model_names:
-        return gr.Dropdown(choices=model_names[llm_provider], value=model_names[llm_provider][0], interactive=True)
-    else:
-        return gr.Dropdown(choices=[], value="", interactive=True, allow_custom_value=True)
+    choices = model_names[llm_provider]
+    new_value = current_model_value
+
+    if not choices or current_model_value not in choices:
+        new_value = choices[0]
+
+    return gr.update(choices=choices, value=new_value)
 
 
 class MissingAPIKeyError(Exception):
@@ -289,13 +292,11 @@ class ConfigManager:
             self.component_order.append(name)
         return component
 
-    def save_current_config(self):
-        """Save the current configuration of all registered components."""
+    def save_current_config(self, *component_values):
+        """Save the current configuration passed directly from Gradio's inputs."""
         current_config = {}
-        for name in self.component_order:
-            component = self.components[name]
-            # Get the current value from the component
-            current_config[name] = getattr(component, "value", None)
+        for i, name in enumerate(self.component_order):
+            current_config[name] = component_values[i]
 
         return save_config_to_file(current_config)
 

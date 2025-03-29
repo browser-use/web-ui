@@ -1150,16 +1150,11 @@ def create_ui(theme_name="Ocean"):
                     lines=2,
                     interactive=False
                 )
-                save_config_button.click(
-                    fn=save_current_config,
-                    inputs=[],  # 不需要输入参数
-                    outputs=[config_status]
-                )
 
         # Attach the callback to the LLM provider dropdown
         llm_provider.change(
-            lambda provider, api_key, base_url: update_model_dropdown(provider, api_key, base_url),
-            inputs=[llm_provider, llm_api_key, llm_base_url],
+            lambda provider, model_name, api_key, base_url: update_model_dropdown(provider, model_name, api_key, base_url),
+            inputs=[llm_provider, llm_model_name, llm_api_key, llm_base_url],
             outputs=llm_model_name
         )
 
@@ -1176,6 +1171,12 @@ def create_ui(theme_name="Ocean"):
         scan_and_register_components(demo)
         global webui_config_manager
         all_components = webui_config_manager.get_all_components()
+
+        save_config_button.click(
+            fn=webui_config_manager.save_current_config,
+            inputs=all_components,
+            outputs=[config_status]
+        )
 
         load_config_button.click(
             fn=update_ui_from_config,
