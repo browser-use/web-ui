@@ -10,14 +10,14 @@ import io
 import asyncio
 import time
 import platform
-from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
-from browser_use.agent.service import Agent
-from browser_use.agent.message_manager.utils import convert_input_messages, extract_json_from_model_output, \
-    save_conversation
-from browser_use.agent.views import (
-    ActionResult,
-    AgentError,
-    AgentHistory,
+from src.agent.custom_prompts import CustomSystemPrompt, CustomAgentMessagePrompt
+from src.agent.base_views import ActionResult, AgentError, AgentHistory, BrowserState, ActionModel
+from src.agent.custom_views import CustomAgentStepInfo, CustomAgentOutput, CustomAgentState
+from src.agent.base_agent import Agent
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from src.agent.custom_message_manager import convert_input_messages, extract_json_from_model_output, save_conversation
+from src.agent.custom_views import (
     AgentHistoryList,
     AgentOutput,
     AgentSettings,
@@ -37,20 +37,17 @@ from browser_use.telemetry.views import (
     AgentStepTelemetryEvent,
 )
 from browser_use.utils import time_execution_async
-from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
-    BaseMessage,
     HumanMessage,
     AIMessage
 )
-from browser_use.browser.views import BrowserState, BrowserStateHistory
-from browser_use.agent.prompts import PlannerPrompt
+from browser_use.agent.prompts import PlannerPrompt, SystemPrompt, AgentMessagePrompt
 
 from json_repair import repair_json
 from src.utils.agent_state import AgentState
 
 from .custom_message_manager import CustomMessageManager, CustomMessageManagerSettings
-from .custom_views import CustomAgentOutput, CustomAgentStepInfo, CustomAgentState
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +106,10 @@ class CustomAgent(Agent):
             injected_agent_state: Optional[AgentState] = None,
             context: Context | None = None,
     ):
-        super(CustomAgent, self).__init__(
+        super().__init__(
             task=task,
             llm=llm,
+            add_infos=add_infos,
             browser=browser,
             browser_context=browser_context,
             controller=controller,
@@ -126,7 +124,6 @@ class CustomAgent(Agent):
             save_conversation_path_encoding=save_conversation_path_encoding,
             max_failures=max_failures,
             retry_delay=retry_delay,
-            system_prompt_class=system_prompt_class,
             max_input_tokens=max_input_tokens,
             validate_output=validate_output,
             message_context=message_context,
@@ -138,10 +135,10 @@ class CustomAgent(Agent):
             page_extraction_llm=page_extraction_llm,
             planner_llm=planner_llm,
             planner_interval=planner_interval,
-            injected_agent_state=injected_agent_state,
-            context=context,
         )
         self.state = injected_agent_state or CustomAgentState()
+        self.context = context
+        self._setup_action_models()
         self.add_infos = add_infos
         self._message_manager = CustomMessageManager(
             task=task,

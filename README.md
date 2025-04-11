@@ -1,3 +1,142 @@
+# King Tadj Web Browser Agent
+
+A modern, AI-powered web browser agent with a beautiful and intuitive user interface.
+
+## Features
+
+- 🎨 Modern, minimalist UI with dark/light mode
+- 🚀 Real-time task management and monitoring
+- 📊 Comprehensive dashboard with agent metrics
+- 📝 Task history and results tracking
+- ⚙️ Configurable agent settings
+- 🌐 Browser automation capabilities
+- 🤖 Multiple LLM provider support
+
+## Tech Stack
+
+### Frontend
+- React 18
+- Tailwind CSS
+- Framer Motion
+- Zustand (State Management)
+- React Router
+- Headless UI
+- Heroicons
+
+### Backend
+- Flask
+- Playwright
+- LangChain
+- AsyncIO
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 16+
+- Python 3.8+
+- Playwright browsers
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/king-tadj-webbrowser-agent.git
+cd king-tadj-webbrowser-agent/web-ui
+```
+
+2. Install Python dependencies:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+3. Install Node.js dependencies:
+```bash
+npm install
+```
+
+4. Install Playwright browsers:
+```bash
+playwright install
+```
+
+5. Create a `.env` file based on `.env.example`:
+```bash
+cp .env.example .env
+```
+
+6. Update the `.env` file with your API keys and settings.
+
+### Development
+
+1. Start the backend server:
+```bash
+python webui.py
+```
+
+2. In a new terminal, start the frontend development server:
+```bash
+npm start
+```
+
+3. Open http://localhost:3000 in your browser.
+
+### Production Build
+
+1. Build the frontend:
+```bash
+npm run build
+```
+
+2. Start the production server:
+```bash
+python webui.py
+```
+
+## Project Structure
+
+```
+web-ui/
+├── src/
+│   ├── components/     # React components
+│   ├── services/       # API services
+│   ├── store/          # State management
+│   ├── utils/          # Utility functions
+│   └── App.jsx         # Main application
+├── webui.py            # Backend server
+├── requirements.txt    # Python dependencies
+└── package.json        # Node.js dependencies
+```
+
+## API Endpoints
+
+- `POST /api/tasks/start` - Start a new task
+- `POST /api/tasks/:id/stop` - Stop a running task
+- `GET /api/tasks/:id/status` - Get task status
+- `GET /api/history` - Get task history
+- `GET /api/settings` - Get current settings
+- `PUT /api/settings` - Update settings
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [Playwright](https://playwright.dev/) for browser automation
+- [LangChain](https://www.langchain.com/) for LLM integration
+- [React](https://reactjs.org/) and [Tailwind CSS](https://tailwindcss.com/) for the UI
+
 <img src="./assets/web-ui.png" alt="Browser Use Web UI" width="full"/>
 
 <br/>

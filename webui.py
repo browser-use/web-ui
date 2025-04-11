@@ -1,6 +1,7 @@
 import pdb
 import logging
-
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,15 +17,11 @@ import gradio as gr
 import inspect
 from functools import wraps
 
-from browser_use.agent.service import Agent
+from src.agent.custom_agent import CustomAgent
 from playwright.async_api import async_playwright
-from browser_use.browser.browser import Browser, BrowserConfig
-from browser_use.browser.context import (
-    BrowserContextConfig,
-    BrowserContextWindowSize,
-)
+from src.browser.custom_browser import CustomBrowser
+from src.browser.custom_context import BrowserContextConfig, CustomBrowserContext
 from langchain_ollama import ChatOllama
-from playwright.async_api import async_playwright
 from src.utils.agent_state import AgentState
 
 from src.utils import utils
@@ -48,6 +45,131 @@ _global_agent_state = AgentState()
 # webui config
 webui_config_manager = utils.ConfigManager()
 
+app = Flask(__name__)
+CORS(app)
+
+# Task management
+tasks = {}
+task_history = []
+
+@app.route('/api/tasks/start', methods=['POST'])
+async def start_task():
+    try:
+        task_data = request.json
+        task_id = str(len(tasks) + 1)
+        
+        # Initialize agent with task
+        llm = utils.get_llm_model(
+            provider=task_data.get('llm_provider', 'openai'),
+            model_name=task_data.get('llm_model', 'gpt-4'),
+            temperature=task_data.get('temperature', 0.7),
+        )
+        
+        agent = CustomAgent(
+            llm=llm,
+            use_vision=task_data.get('use_vision', True),
+            max_steps=task_data.get('max_steps', 10),
+        )
+        
+        tasks[task_id] = {
+            'agent': agent,
+            'status': 'running',
+            'task': task_data['task'],
+            'start_time': utils.get_current_time(),
+        }
+        
+        # Start task in background
+        asyncio.create_task(run_task(task_id, agent, task_data['task']))
+        
+        return jsonify({
+            'task_id': task_id,
+            'status': 'started',
+        })
+    except Exception as e:
+        logger.error(f"Error starting task: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tasks/<task_id>/stop', methods=['POST'])
+async def stop_task(task_id):
+    try:
+        if task_id not in tasks:
+            return jsonify({'error': 'Task not found'}), 404
+            
+        task = tasks[task_id]
+        task['agent'].stop()
+        task['status'] = 'stopped'
+        task['end_time'] = utils.get_current_time()
+        
+        return jsonify({'status': 'stopped'})
+    except Exception as e:
+        logger.error(f"Error stopping task: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tasks/<task_id>/status', methods=['GET'])
+async def get_task_status(task_id):
+    try:
+        if task_id not in tasks:
+            return jsonify({'error': 'Task not found'}), 404
+            
+        task = tasks[task_id]
+        return jsonify({
+            'status': task['status'],
+            'task': task['task'],
+            'start_time': task['start_time'],
+            'end_time': task.get('end_time'),
+        })
+    except Exception as e:
+        logger.error(f"Error getting task status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/history', methods=['GET'])
+async def get_history():
+    try:
+        return jsonify(task_history)
+    except Exception as e:
+        logger.error(f"Error getting history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings', methods=['GET', 'PUT'])
+async def handle_settings():
+    try:
+        if request.method == 'GET':
+            return jsonify({
+                'llm_provider': os.getenv('LLM_PROVIDER', 'openai'),
+                'llm_model': os.getenv('LLM_MODEL', 'gpt-4'),
+                'temperature': float(os.getenv('TEMPERATURE', 0.7)),
+                'use_vision': os.getenv('USE_VISION', 'true').lower() == 'true',
+                'max_steps': int(os.getenv('MAX_STEPS', 10)),
+                'headless': os.getenv('HEADLESS', 'true').lower() == 'true',
+            })
+        else:  # PUT
+            settings = request.json
+            for key, value in settings.items():
+                os.environ[key.upper()] = str(value)
+            return jsonify({'status': 'updated'})
+    except Exception as e:
+        logger.error(f"Error handling settings: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+async def run_task(task_id, agent, task):
+    try:
+        result = await agent.run(task)
+        tasks[task_id]['status'] = 'completed'
+        tasks[task_id]['result'] = result
+    except Exception as e:
+        tasks[task_id]['status'] = 'failed'
+        tasks[task_id]['error'] = str(e)
+    finally:
+        tasks[task_id]['end_time'] = utils.get_current_time()
+        task_history.append({
+            'task_id': task_id,
+            'task': task,
+            'status': tasks[task_id]['status'],
+            'start_time': tasks[task_id]['start_time'],
+            'end_time': tasks[task_id]['end_time'],
+            'result': tasks[task_id].get('result'),
+            'error': tasks[task_id].get('error'),
+        })
 
 def scan_and_register_components(blocks):
     """扫描一个 Blocks 对象并注册其中的所有交互式组件，但不包括按钮"""

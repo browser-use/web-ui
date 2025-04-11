@@ -1,9 +1,7 @@
 import pdb
 from typing import List, Optional
 
-from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
-from browser_use.agent.views import ActionResult, ActionModel
-from browser_use.browser.views import BrowserState
+from src.agent.base_views import ActionResult, ActionModel, BrowserState
 from langchain_core.messages import HumanMessage, SystemMessage
 from datetime import datetime
 import importlib
@@ -11,7 +9,11 @@ import importlib
 from .custom_views import CustomAgentStepInfo
 
 
-class CustomSystemPrompt(SystemPrompt):
+class CustomSystemPrompt:
+    def __init__(self):
+        self.prompt_template = None
+        self._load_prompt_template()
+
     def _load_prompt_template(self) -> None:
         """Load the prompt template from the markdown file."""
         try:
@@ -21,8 +23,13 @@ class CustomSystemPrompt(SystemPrompt):
         except Exception as e:
             raise RuntimeError(f'Failed to load system prompt template: {e}')
 
+    def get_system_message(self) -> SystemMessage:
+        if not self.prompt_template:
+            raise RuntimeError('Prompt template not loaded')
+        return SystemMessage(content=self.prompt_template)
 
-class CustomAgentMessagePrompt(AgentMessagePrompt):
+
+class CustomAgentMessagePrompt:
     def __init__(
             self,
             state: BrowserState,
@@ -31,12 +38,11 @@ class CustomAgentMessagePrompt(AgentMessagePrompt):
             include_attributes: list[str] = [],
             step_info: Optional[CustomAgentStepInfo] = None,
     ):
-        super(CustomAgentMessagePrompt, self).__init__(state=state,
-                                                       result=result,
-                                                       include_attributes=include_attributes,
-                                                       step_info=step_info
-                                                       )
+        self.state = state
         self.actions = actions
+        self.result = result
+        self.include_attributes = include_attributes
+        self.step_info = step_info
 
     def get_user_message(self, use_vision: bool = True) -> HumanMessage:
         if self.step_info:

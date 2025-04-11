@@ -2,9 +2,62 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Type
 import uuid
 
-from browser_use.agent.views import AgentOutput, AgentState, ActionResult, AgentHistoryList, MessageManagerState
-from browser_use.controller.registry.views import ActionModel
+from src.agent.base_views import AgentOutput, AgentState, ActionResult, AgentHistoryList, MessageManagerState, ActionModel
 from pydantic import BaseModel, ConfigDict, Field, create_model
+
+
+# Type for tool calling method
+ToolCallingMethod = Literal['auto', 'function_call', 'json']
+
+
+@dataclass
+class AgentSettings:
+    """Settings for the agent"""
+    use_vision: bool = True
+    use_vision_for_planner: bool = False
+    save_conversation_path: Optional[str] = None
+    save_conversation_path_encoding: Optional[str] = 'utf-8'
+    max_failures: int = 3
+    retry_delay: int = 10
+    max_input_tokens: int = 128000
+    validate_output: bool = False
+    message_context: Optional[str] = None
+    generate_gif: bool | str = False
+    available_file_paths: Optional[list[str]] = None
+    include_attributes: list[str] = Field(default_factory=lambda: [
+        'title',
+        'type',
+        'name',
+        'role',
+        'aria-label',
+        'placeholder',
+        'value',
+        'alt',
+        'aria-expanded',
+        'data-date-format',
+    ])
+    max_actions_per_step: int = 10
+    tool_calling_method: Optional[ToolCallingMethod] = 'auto'
+
+
+@dataclass
+class AgentStepInfo:
+    """Information about the current step of the agent"""
+    step_number: int
+    max_steps: int
+    task: str
+    memory: str = ""
+
+
+@dataclass
+class StepMetadata:
+    """Metadata about a step in the agent's execution"""
+    step_number: int
+    timestamp: float
+    duration: float
+    success: bool
+    error: Optional[str] = None
+    action_results: Optional[List[Dict[str, Any]]] = None
 
 
 @dataclass

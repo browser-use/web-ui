@@ -124,6 +124,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv-py310/
 env/
 venv/
 ENV/
@@ -187,3 +188,4 @@ data/
 
 # For Config Files (Current Settings)
 .config.pkl
+node_modules

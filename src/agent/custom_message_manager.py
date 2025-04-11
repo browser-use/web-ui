@@ -107,3 +107,60 @@ class CustomMessageManager(MessageManager):
                 self.state.history.messages.pop(i)
                 break
             i -= 1
+
+
+def convert_input_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """Convert input messages to the format expected by the message manager"""
+    converted_messages = []
+    for message in messages:
+        if isinstance(message, HumanMessage):
+            converted_messages.append(HumanMessage(content=message.content))
+        elif isinstance(message, AIMessage):
+            converted_messages.append(AIMessage(content=message.content))
+        elif isinstance(message, SystemMessage):
+            converted_messages.append(SystemMessage(content=message.content))
+        elif isinstance(message, ToolMessage):
+            converted_messages.append(ToolMessage(content=message.content, tool_call_id=message.tool_call_id))
+    return converted_messages
+
+
+def extract_json_from_model_output(output: str) -> Dict:
+    """Extract JSON from model output string"""
+    import json
+    import re
+    
+    # Try to find JSON content between ```json and ``` markers
+    json_match = re.search(r'```json\s*(.*?)\s*```', output, re.DOTALL)
+    if json_match:
+        json_str = json_match.group(1)
+    else:
+        # If no markers found, try to find JSON content directly
+        json_str = output.strip()
+    
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        # If JSON parsing fails, try to repair the JSON
+        from json_repair import repair_json
+        repaired_json = repair_json(json_str)
+        return json.loads(repaired_json)
+
+
+def save_conversation(messages: List[BaseMessage], path: str, encoding: str = 'utf-8') -> None:
+    """Save conversation messages to a file"""
+    import json
+    from datetime import datetime
+    
+    conversation = []
+    for message in messages:
+        msg_dict = {
+            'type': message.__class__.__name__,
+            'content': message.content,
+            'timestamp': datetime.now().isoformat()
+        }
+        if isinstance(message, ToolMessage):
+            msg_dict['tool_call_id'] = message.tool_call_id
+        conversation.append(msg_dict)
+    
+    with open(path, 'w', encoding=encoding) as f:
+        json.dump(conversation, f, indent=2, ensure_ascii=False)
