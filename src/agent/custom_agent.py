@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import base64
 import io
+import re
 import asyncio
 import time
 import platform
@@ -223,6 +224,7 @@ class CustomAgent(Agent):
             ai_content = ai_message.content
 
         try:
+            ai_content = re.sub(r"<think>.*?</think>", "", ai_content, flags=re.DOTALL).strip()
             ai_content = ai_content.replace("```json", "").replace("```", "")
             ai_content = repair_json(ai_content)
             parsed_json = json.loads(ai_content)
