@@ -26,7 +26,9 @@ PROVIDER_DISPLAY_NAMES = {
     "alibaba": "Alibaba",
     "moonshot": "MoonShot",
     "unbound": "Unbound AI",
+    "xinference": "XInference",
     "ibm": "IBM"
+
 }
 
 
@@ -202,6 +204,27 @@ def get_llm_model(provider: str, **kwargs):
             model_name=kwargs.get("model_name", "Qwen/QwQ-32B"),
             temperature=kwargs.get("temperature", 0.0),
         )
+    elif provider == "xinference":
+        if not kwargs.get("base_url", ""):
+            base_url = os.getenv("XINFERENCE_OPENAI_ENDPOINT", "https://api.xinference.com/v1")
+        else:
+            base_url = kwargs.get("base_url")
+
+        if not kwargs.get("api_key", ""):
+            api_key = os.getenv("XINFERENCE_API_KEY", "")
+        else:
+            api_key = kwargs.get("api_key")
+
+        if not kwargs.get("model_name", ""):
+            model_name = os.getenv("XINFERENCE_MODEL", "qwen2.5-instruct")
+        else:
+            model_name = kwargs.get("model_name")
+        return ChatOpenAI(
+            model=model_name,
+            temperature=kwargs.get("temperature", 0.0),
+            base_url=base_url,
+            api_key=api_key,
+        )
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
@@ -253,7 +276,12 @@ model_names = {
         "Pro/THUDM/chatglm3-6b",
         "Pro/THUDM/glm-4-9b-chat",
     ],
+    "xinference": ["qwen2.5-instruct", "qwen2.5", "qwen2.5-coder", "qwen2.5-coder-instruct", "qwen2.5-instruct-1m",
+                   "qwen2.5-vl-instruct", "deepseek", "deepseek-chat", "deepseek-coder", "deepseek-coder-instruct",
+                   "deepseek-r1", "deepseek-v2", "deepseek-v2-chat", "deepseek-v2-chat-0628", "deepseek-v2.5",
+                   "deepseek-v3", "deepseek-vl-chat", "deepseek-vl2"]
     "ibm": ["ibm/granite-vision-3.1-2b-preview", "meta-llama/llama-4-maverick-17b-128e-instruct-fp8","meta-llama/llama-3-2-90b-vision-instruct"]
+
 }
 
 
