@@ -47,7 +47,7 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
     && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
     && ln -s /opt/novnc/vnc.html /opt/novnc/index.html
 
-# Set platform for ARM64 compatibility
+# Set platform for AMD64 compatibility
 ARG TARGETPLATFORM=linux/amd64
 
 # Set up working directory
