@@ -8,3 +8,4 @@ langchain-ibm==0.3.10
 langchain_mcp_adapters==0.0.9
 langgraph==0.3.34
 langchain-community
+playwright==1.52.0

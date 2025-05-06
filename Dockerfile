@@ -2,50 +2,50 @@ FROM python:3.11-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    wget \
-    netcat-traditional \
-    gnupg \
-    curl \
-    unzip \
-    xvfb \
-    libgconf-2-4 \
-    libxss1 \
-    libnss3 \
-    libnspr4 \
-    libasound2 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    xdg-utils \
-    fonts-liberation \
-    dbus \
-    xauth \
-    xvfb \
-    x11vnc \
-    tigervnc-tools \
-    supervisor \
-    net-tools \
-    procps \
-    git \
-    python3-numpy \
-    fontconfig \
-    fonts-dejavu \
-    fonts-dejavu-core \
-    fonts-dejavu-extra \
-    && rm -rf /var/lib/apt/lists/*
+  wget \
+  netcat-traditional \
+  gnupg \
+  curl \
+  unzip \
+  xvfb \
+  libgconf-2-4 \
+  libxss1 \
+  libnss3 \
+  libnspr4 \
+  libasound2 \
+  libatk1.0-0 \
+  libatk-bridge2.0-0 \
+  libcups2 \
+  libdbus-1-3 \
+  libdrm2 \
+  libgbm1 \
+  libgtk-3-0 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libxrandr2 \
+  xdg-utils \
+  fonts-liberation \
+  dbus \
+  xauth \
+  xvfb \
+  x11vnc \
+  tigervnc-tools \
+  supervisor \
+  net-tools \
+  procps \
+  git \
+  python3-numpy \
+  fontconfig \
+  fonts-dejavu \
+  fonts-dejavu-core \
+  fonts-dejavu-extra \
+  && rm -rf /var/lib/apt/lists/*
 
 # Install noVNC
 RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
-    && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
-    && ln -s /opt/novnc/vnc.html /opt/novnc/index.html
+  && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
+  && ln -s /opt/novnc/vnc.html /opt/novnc/index.html
 
 # Set platform for ARM64 compatibility
 ARG TARGETPLATFORM=linux/amd64
@@ -56,6 +56,7 @@ WORKDIR /app
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m playwright install
 
 # Install Playwright and browsers with system dependencies
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
