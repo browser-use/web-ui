@@ -58,9 +58,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright and browsers with system dependencies
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN playwright install --with-deps chromium
-RUN playwright install-deps
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-patchright
+RUN patchright install --with-deps chromium
+RUN patchright install-deps
 
 # Copy the application code
 COPY . .
