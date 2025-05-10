@@ -1,6 +1,6 @@
 services:
   browser-use-webui:
-    platform: linux/amd64
+    # image: ghcr.io/browser-use/web-ui # Using precompiled image
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
