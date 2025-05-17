@@ -93,7 +93,7 @@ class WebuiManager:
 
         return os.path.join(self.settings_save_dir, f"{config_name}.json")
 
-    def load_config(self, config_path: str):
+    async def load_config(self, config_path: str):
         """
         Load config
         """
@@ -108,6 +108,9 @@ class WebuiManager:
                     update_components[comp] = comp.__class__(value=comp_val, type="messages")
                 else:
                     update_components[comp] = comp.__class__(value=comp_val)
+                    if comp_id == "agent_settings.planner_llm_provider":
+                        yield update_components  # yield provider, let callback run
+                        await asyncio.sleep(0.1)  # wait for Gradio UI callback
 
         config_status = self.id_to_component["load_save_config.config_status"]
         update_components.update(
