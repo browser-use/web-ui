@@ -526,6 +526,8 @@ async def run_agent_task(
                 raise ValueError(
                     "Browser or Context not initialized, cannot create agent."
                 )
+            print("OLLAMA_ENDPOINT:", os.environ.get("OLLAMA_ENDPOINT"))
+            print("OLLAMA_HOST:", os.environ.get("OLLAMA_HOST"))
             webui_manager.bu_agent = BrowserUseAgent(
                 task=task,
                 llm=main_llm,

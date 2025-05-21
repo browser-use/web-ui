@@ -233,7 +233,7 @@ def get_llm_model(provider: str, **kwargs):
         )
     elif provider == "ollama":
         if not kwargs.get("base_url", ""):
-            base_url = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434")
+            base_url = os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434")
         else:
             base_url = kwargs.get("base_url")
 
