@@ -1111,7 +1111,12 @@ class DeepResearchAgent:
             }
 
         self.current_task_id = task_id if task_id else str(uuid.uuid4())
-        output_dir = os.path.join(save_dir, self.current_task_id)
+        safe_root_dir = "./tmp/deep_research"
+        normalized_save_dir = os.path.normpath(save_dir)
+        if not normalized_save_dir.startswith(os.path.abspath(safe_root_dir)):
+            logger.warning(f"Unsafe save_dir detected: {save_dir}. Using default directory.")
+            normalized_save_dir = os.path.abspath(safe_root_dir)
+        output_dir = os.path.join(normalized_save_dir, self.current_task_id)
         os.makedirs(output_dir, exist_ok=True)
 
         logger.info(
