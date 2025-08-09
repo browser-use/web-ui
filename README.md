@@ -87,6 +87,16 @@ cp .env.example .env
     ```bash
     python webui.py --ip 127.0.0.1 --port 7788
     ```
+    
+    **Optional Arguments:**
+    - `--public`: Create a public URL that can be accessed from anywhere (useful for sharing or remote access)
+    - `--theme`: Choose a UI theme (Default, Soft, Monochrome, Glass, Origin, Citrus, Ocean, Base)
+    
+    **Example with public access:**
+    ```bash
+    python webui.py --ip 127.0.0.1 --port 7788 --public
+    ```
+    
 2. **Access the WebUI:** Open your web browser and navigate to `http://127.0.0.1:7788`.
 3. **Using Your Own Browser(Optional):**
     - Set `BROWSER_PATH` to the executable path of your browser and `BROWSER_USER_DATA` to the user data directory of your browser. Leave `BROWSER_USER_DATA` empty if you want to use local user data.
