@@ -70,6 +70,16 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
     markdown_download_comp = webui_manager.get_component_by_id("deep_research_agent.markdown_download")
     mcp_server_config_comp = webui_manager.get_component_by_id("deep_research_agent.mcp_server_config")
 
+    # New UI components for interaction
+    status_display_comp = webui_manager.get_component_by_id("deep_research_agent.status_display")
+    confirmation_group_comp = webui_manager.get_component_by_id("deep_research_agent.confirmation_group")
+    # confirm_synthesis_button_comp = webui_manager.get_component_by_id("deep_research_agent.confirm_synthesis_button") # Already part of all_managed_inputs if named correctly
+    error_feedback_group_comp = webui_manager.get_component_by_id("deep_research_agent.error_feedback_group")
+    error_details_display_comp = webui_manager.get_component_by_id("deep_research_agent.error_details_display")
+    # error_feedback_choice_comp = webui_manager.get_component_by_id("deep_research_agent.error_feedback_choice") # Already part of all_managed_inputs
+    # submit_error_feedback_button_comp = webui_manager.get_component_by_id("deep_research_agent.submit_error_feedback_button") # Already part of all_managed_inputs
+
+
     # --- 1. Get Task and Settings ---
     task_topic = components.get(research_task_comp, "").strip()
     task_id_to_resume = components.get(resume_task_id_comp, "").strip() or None
@@ -101,11 +111,15 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         resume_task_id_comp: gr.update(interactive=False),
         parallel_num_comp: gr.update(interactive=False),
         save_dir_comp: gr.update(interactive=False),
-        markdown_display_comp: gr.update(value="Starting research..."),
-        markdown_download_comp: gr.update(value=None, interactive=False)
+        markdown_display_comp: gr.update(value=""), # Clear previous report
+        markdown_download_comp: gr.update(value=None, interactive=False),
+        status_display_comp: gr.update(value="Starting research...", visible=True),
+        confirmation_group_comp: gr.update(visible=False),
+        error_feedback_group_comp: gr.update(visible=False),
     }
 
-    agent_task = None
+    # agent_task renamed to agent_run_task_async for clarity
+    agent_run_task_async = None
     running_task_id = None
     plan_file_path = None
     report_file_path = None
@@ -154,205 +168,276 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
                 mcp_server_config=mcp_config
             )
             logger.info("DeepResearchAgent initialized.")
+        # Persist the agent instance in webui_manager if it's a new run or resuming an existing one
+        # This is now implicitly handled by webui_manager.dr_agent not being cleared if paused.
 
         # --- 5. Start Agent Run ---
+        # The agent instance (webui_manager.dr_agent) is now managed across calls if paused.
+        # Task ID for resume is handled by the agent itself if passed in initial_state.
+        # We use webui_manager.dr_task_id to track the *current* or *resumed* task.
+
+        current_agent_task_id = task_id_to_resume if task_id_to_resume else None
+
+        # Store agent and task_id in webui_manager so other handlers can access it
+        webui_manager.dr_task_id = current_agent_task_id # May be updated by agent's run result
+
         agent_run_coro = webui_manager.dr_agent.run(
-            topic=task_topic,
-            task_id=task_id_to_resume,
+            topic=task_topic, # Topic might be ignored if resuming with a plan
+            task_id=current_agent_task_id,
             save_dir=base_save_dir,
             max_parallel_browsers=max_parallel_agents
         )
-        agent_task = asyncio.create_task(agent_run_coro)
-        webui_manager.dr_current_task = agent_task
+        agent_run_task_async = asyncio.create_task(agent_run_coro)
+        webui_manager.dr_current_task_async = agent_run_task_async
 
-        # Wait briefly for the agent to start and potentially create the task ID/folder
-        await asyncio.sleep(1.0)
+        # Initial running_task_id, might be updated by the agent's run method's result
+        running_task_id = webui_manager.dr_agent.current_task_id # Agent sets this internally on run
+        if not running_task_id and current_agent_task_id: # If resuming, agent.current_task_id might not be set until run
+            running_task_id = current_agent_task_id
 
-        # Determine the actual task ID being used (agent sets this)
-        running_task_id = webui_manager.dr_agent.current_task_id
-        if not running_task_id:
-            # Agent might not have set it yet, try to get from result later? Risky.
-            # Or derive from resume_task_id if provided?
-            running_task_id = task_id_to_resume
-            if not running_task_id:
-                logger.warning("Could not determine running task ID immediately.")
-                # We can still monitor, but might miss initial plan if ID needed for path
-            else:
-                logger.info(f"Assuming task ID based on resume ID: {running_task_id}")
-        else:
-            logger.info(f"Agent started with Task ID: {running_task_id}")
+        webui_manager.dr_task_id = running_task_id # Update manager with potentially new task_id from a fresh run
 
-        webui_manager.dr_task_id = running_task_id  # Store for stop handler
+        # --- 6. Monitor Progress & Handle Intermediate States ---
+        # This loop replaces the old file monitoring. It now processes agent's dictionary results.
+        last_plan_content = "" # To avoid re-rendering identical plan
 
-        # --- 6. Monitor Progress via research_plan.md ---
-        if running_task_id:
-            task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
-            plan_file_path = os.path.join(task_specific_dir, "research_plan.md")
-            report_file_path = os.path.join(task_specific_dir, "report.md")
-            logger.info(f"Monitoring plan file: {plan_file_path}")
-        else:
-            logger.warning("Cannot monitor plan file: Task ID unknown.")
-            plan_file_path = None
-        last_plan_content = None
-        while not agent_task.done():
-            update_dict = {}
-            update_dict[resume_task_id_comp] = gr.update(value=running_task_id)
-            agent_stopped = getattr(webui_manager.dr_agent, 'stopped', False)
-            if agent_stopped:
-                logger.info("Stop signal detected from agent state.")
-                break  # Exit monitoring loop
+        while not agent_run_task_async.done():
+            # Try to get intermediate results or updates if agent supports streaming them.
+            # For now, we'll primarily rely on the final_result_dict after the task is done,
+            # but this structure allows for future enhancements if agent.run() becomes a generator.
+            # The main loop will break when agent_run_task_async is done.
 
-            # Check and update research plan display
-            if plan_file_path:
-                try:
-                    current_mtime = os.path.getmtime(plan_file_path) if os.path.exists(plan_file_path) else 0
-                    if current_mtime > last_plan_mtime:
-                        logger.info(f"Detected change in {plan_file_path}")
-                        plan_content = _read_file_safe(plan_file_path)
-                        if last_plan_content is None or (
-                                plan_content is not None and plan_content != last_plan_content):
-                            update_dict[markdown_display_comp] = gr.update(value=plan_content)
-                            last_plan_content = plan_content
-                            last_plan_mtime = current_mtime
-                        elif plan_content is None:
-                            # File might have been deleted or became unreadable
-                            last_plan_mtime = 0  # Reset to force re-read attempt later
-                except Exception as e:
-                    logger.warning(f"Error checking/reading plan file {plan_file_path}: {e}")
-                    # Avoid continuous logging for the same error
-                    await asyncio.sleep(2.0)
+            # Update plan display if running_task_id is known
+            if running_task_id: # Ensure running_task_id is set (agent sets this)
+                task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
+                plan_file_path = os.path.join(task_specific_dir, "research_plan.md")
+                if os.path.exists(plan_file_path):
+                    try:
+                        current_plan_content = _read_file_safe(plan_file_path)
+                        if current_plan_content and current_plan_content != last_plan_content:
+                            yield {markdown_display_comp: gr.update(value=current_plan_content)}
+                            last_plan_content = current_plan_content
+                    except Exception as e:
+                        logger.warning(f"Could not read plan file for update: {e}")
 
-            # Yield updates if any
-            if update_dict:
-                yield update_dict
+            agent_stopped_flag = getattr(webui_manager.dr_agent, 'stopped', False)
+            if agent_stopped_flag:
+                logger.info("Stop signal detected from agent state during run.")
+                break # Exit monitoring loop, let finalization handle result.
 
-            await asyncio.sleep(1.0)  # Check file changes every second
+            yield {resume_task_id_comp: gr.update(value=running_task_id if running_task_id else "")}
+            await asyncio.sleep(1.0)
 
-        # --- 7. Task Finalization ---
-        logger.info("Agent task processing finished. Awaiting final result...")
-        final_result_dict = await agent_task  # Get result or raise exception
-        logger.info(f"Agent run completed. Result keys: {final_result_dict.keys() if final_result_dict else 'None'}")
+        logger.info("Agent task processing finished. Awaiting final result from agent.run()...")
+        final_result_dict = await agent_run_task_async
+        webui_manager.dr_current_task_async = None # Clear finished asyncio task
 
-        # Try to get task ID from result if not known before
-        if not running_task_id and final_result_dict and 'task_id' in final_result_dict:
-            running_task_id = final_result_dict['task_id']
-            webui_manager.dr_task_id = running_task_id
-            task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
-            report_file_path = os.path.join(task_specific_dir, "report.md")
-            logger.info(f"Task ID confirmed from result: {running_task_id}")
+        running_task_id = final_result_dict.get("task_id", running_task_id) # Update task_id from final result
+        webui_manager.dr_task_id = running_task_id # Ensure manager has the definitive task_id
 
-        final_ui_update = {}
-        if report_file_path and os.path.exists(report_file_path):
-            logger.info(f"Loading final report from: {report_file_path}")
-            report_content = _read_file_safe(report_file_path)
-            if report_content:
-                final_ui_update[markdown_display_comp] = gr.update(value=report_content)
-                final_ui_update[markdown_download_comp] = gr.File(value=report_file_path,
-                                                                  label=f"Report ({running_task_id}.md)",
-                                                                  interactive=True)
-            else:
-                final_ui_update[markdown_display_comp] = gr.update(
-                    value="# Research Complete\n\n*Error reading final report file.*")
-        elif final_result_dict and 'report' in final_result_dict:
-            logger.info("Using report content directly from agent result.")
-            # If agent directly returns report content
-            final_ui_update[markdown_display_comp] = gr.update(value=final_result_dict['report'])
-            # Cannot offer download if only content is available
-            final_ui_update[markdown_download_comp] = gr.update(value=None, label="Download Research Report",
-                                                                interactive=False)
-        else:
-            logger.warning("Final report file not found and not in result dict.")
-            final_ui_update[markdown_display_comp] = gr.update(value="# Research Complete\n\n*Final report not found.*")
+        logger.info(f"Agent run completed. Status: {final_result_dict.get('status')}, Message: {final_result_dict.get('message')}")
 
-        yield final_ui_update
-
-
-    except Exception as e:
-        logger.error(f"Error during Deep Research Agent execution: {e}", exc_info=True)
-        gr.Error(f"Research failed: {e}")
-        yield {markdown_display_comp: gr.update(value=f"# Research Failed\n\n**Error:**\n```\n{e}\n```")}
-
-    finally:
-        # --- 8. Final UI Reset ---
-        webui_manager.dr_current_task = None  # Clear task reference
-        webui_manager.dr_task_id = None  # Clear running task ID
-
-        yield {
-            start_button_comp: gr.update(value="▶️ Run", interactive=True),
+        ui_updates = {
             stop_button_comp: gr.update(interactive=False),
+            # Default to re-enabling inputs, specific states below will override
+            start_button_comp: gr.update(value="▶️ Run", interactive=True),
             research_task_comp: gr.update(interactive=True),
-            resume_task_id_comp: gr.update(value="", interactive=True),
+            resume_task_id_comp: gr.update(interactive=True, value=running_task_id), # Show final task ID
             parallel_num_comp: gr.update(interactive=True),
             save_dir_comp: gr.update(interactive=True),
-            # Keep download button enabled if file exists
-            markdown_download_comp: gr.update() if report_file_path and os.path.exists(report_file_path) else gr.update(
-                interactive=False)
         }
+
+        status = final_result_dict.get("status")
+
+        if status == "awaiting_confirmation":
+            ui_updates[status_display_comp] = gr.update(value=final_result_dict.get("message", "Awaiting final confirmation from user."), visible=True)
+            ui_updates[confirmation_group_comp] = gr.update(visible=True)
+            ui_updates[error_feedback_group_comp] = gr.update(visible=False)
+            ui_updates[start_button_comp] = gr.update(interactive=False) # Keep run disabled
+            ui_updates[research_task_comp] = gr.update(interactive=False)
+            ui_updates[resume_task_id_comp] = gr.update(interactive=False)
+            # webui_manager.dr_agent should NOT be cleared here by run_deep_research
+        elif status == "awaiting_error_feedback":
+            ui_updates[status_display_comp] = gr.update(value=final_result_dict.get("message", "Paused due to an error."), visible=True)
+            ui_updates[error_details_display_comp] = gr.update(value=f"**Error in {final_result_dict.get('current_error_node_origin', 'N/A')}:**\n\n```\n{final_result_dict.get('error_details', 'No details provided.')}\n```")
+            ui_updates[error_feedback_group_comp] = gr.update(visible=True)
+            ui_updates[confirmation_group_comp] = gr.update(visible=False)
+            ui_updates[start_button_comp] = gr.update(interactive=False) # Keep run disabled
+            ui_updates[research_task_comp] = gr.update(interactive=False)
+            ui_updates[resume_task_id_comp] = gr.update(interactive=False)
+            # webui_manager.dr_agent should NOT be cleared here
+        else: # Terminal states: "completed", "stopped", "error", "finished_incomplete"
+            ui_updates[status_display_comp] = gr.update(value=f"Status: {status}. {final_result_dict.get('message', '')}", visible=True)
+            ui_updates[confirmation_group_comp] = gr.update(visible=False)
+            ui_updates[error_feedback_group_comp] = gr.update(visible=False)
+
+            if running_task_id: # Try to load report for terminal states
+                task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
+                report_file_path = os.path.join(task_specific_dir, "report.md")
+                if os.path.exists(report_file_path):
+                    report_content = _read_file_safe(report_file_path)
+                    ui_updates[markdown_display_comp] = gr.update(value=report_content if report_content else "Report file found but empty.")
+                    ui_updates[markdown_download_comp] = gr.File(value=report_file_path, label=f"Report ({running_task_id}.md)", interactive=True)
+                elif final_result_dict.get("final_report"): # If report is in dict (e.g. error before save)
+                     ui_updates[markdown_display_comp] = gr.update(value=final_result_dict["final_report"])
+                     ui_updates[markdown_download_comp] = gr.update(interactive=False, value=None)
+                else:
+                    ui_updates[markdown_display_comp] = gr.update(value=f"# Research Ended\n\nStatus: {status}\nMessage: {final_result_dict.get('message', 'No further details.')}")
+                    ui_updates[markdown_download_comp] = gr.update(interactive=False, value=None)
+            else: # No running_task_id, show message from dict
+                ui_updates[markdown_display_comp] = gr.update(value=f"# Research Ended\n\nStatus: {status}\nMessage: {final_result_dict.get('message', 'No task ID was available to load report.')}")
+
+            # Clear agent from manager ONLY if it's a terminal state from the initial run
+            webui_manager.dr_agent = None
+            webui_manager.dr_task_id = None
+            logger.info(f"Agent run concluded with terminal status '{status}'. Cleared active agent from WebuiManager.")
+
+        yield ui_updates
+
+    except Exception as e:
+        logger.error(f"Error in run_deep_research: {e}", exc_info=True)
+        gr.Error(f"Research failed: {e}")
+        yield {
+            markdown_display_comp: gr.update(value=f"# Research Failed\n\n**Error:**\n```\n{e}\n```"),
+            status_display_comp: gr.update(value=f"Critical error: {e}", visible=True),
+            start_button_comp: gr.update(interactive=True), # Re-enable on critical failure
+            stop_button_comp: gr.update(interactive=False),
+            confirmation_group_comp: gr.update(visible=False),
+            error_feedback_group_comp: gr.update(visible=False),
+        }
+        # Ensure agent is cleared on such an error
+        webui_manager.dr_agent = None
+        webui_manager.dr_task_id = None
+        webui_manager.dr_current_task_async = None
+    finally:
+        # This finally block now only handles UI elements that need resetting if not handled by status logic
+        # The agent instance (webui_manager.dr_agent) is managed based on returned status.
+        # dr_current_task_async should be None if task finished or errored out of the main try.
+        if webui_manager.dr_current_task_async and not webui_manager.dr_current_task_async.done():
+             logger.info("run_deep_research finally block: Task was still running, implies an issue if not paused.")
+
+        # If not paused, ensure buttons are reset. If paused, they are managed by the status block.
+        current_status_is_paused = False
+        if 'status' in locals() and status in ["awaiting_confirmation", "awaiting_error_feedback"]:
+            current_status_is_paused = True
+
+        if not current_status_is_paused:
+            final_reset_ui = {
+                start_button_comp: gr.update(value="▶️ Run", interactive=True),
+                stop_button_comp: gr.update(interactive=False),
+                research_task_comp: gr.update(interactive=True),
+                resume_task_id_comp: gr.update(interactive=True), # Value already set by status block or remains empty
+                parallel_num_comp: gr.update(interactive=True),
+                save_dir_comp: gr.update(interactive=True),
+            }
+            # Only yield if there's something to update and not already covered by a specific status yield
+            # This avoids a redundant yield if the last status yield already handled button states.
+            if status not in ["awaiting_confirmation", "awaiting_error_feedback"]:
+                 yield final_reset_ui
+        # Ensure dr_current_task_async is cleared if it's done or was never set properly
+        webui_manager.dr_current_task_async = None
 
 
 async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any]:
     """Handles the Stop button click."""
     logger.info("Stop button clicked for Deep Research.")
+    """Handles the Stop button click."""
+    logger.info("Stop button clicked for Deep Research.")
     agent = webui_manager.dr_agent
-    task = webui_manager.dr_current_task
+    async_task = webui_manager.dr_current_task_async # Changed from dr_current_task
     task_id = webui_manager.dr_task_id
-    base_save_dir = webui_manager.dr_save_dir
+    base_save_dir = webui_manager.dr_save_dir # Used for report loading
 
+    # Get components for UI updates
     stop_button_comp = webui_manager.get_component_by_id("deep_research_agent.stop_button")
     start_button_comp = webui_manager.get_component_by_id("deep_research_agent.start_button")
     markdown_display_comp = webui_manager.get_component_by_id("deep_research_agent.markdown_display")
     markdown_download_comp = webui_manager.get_component_by_id("deep_research_agent.markdown_download")
+    status_display_comp = webui_manager.get_component_by_id("deep_research_agent.status_display")
+    confirmation_group_comp = webui_manager.get_component_by_id("deep_research_agent.confirmation_group")
+    error_feedback_group_comp = webui_manager.get_component_by_id("deep_research_agent.error_feedback_group")
 
-    final_update = {
-        stop_button_comp: gr.update(interactive=False, value="⏹️ Stopping...")
+    ui_updates = {
+        stop_button_comp: gr.update(interactive=False, value="⏹️ Stopping..."),
+        start_button_comp: gr.update(interactive=False), # Keep start disabled until fully stopped
+        confirmation_group_comp: gr.update(visible=False), # Hide interactive groups
+        error_feedback_group_comp: gr.update(visible=False),
+        status_display_comp: gr.update(value="Stopping research...", visible=True)
     }
 
-    if agent and task and not task.done():
-        logger.info("Signalling DeepResearchAgent to stop.")
+    if agent: # Agent might exist even if task is None (e.g. if run failed before task creation)
+        logger.info(f"Signalling DeepResearchAgent (task_id: {task_id}) to stop.")
         try:
-            # Assuming stop is synchronous or sets a flag quickly
-            await agent.stop()
+            await agent.stop() # This should set the agent's internal stop_event
         except Exception as e:
-            logger.error(f"Error calling agent.stop(): {e}")
-
-        # The run_deep_research loop should detect the stop and exit.
-        # We yield an intermediate "Stopping..." state. The final reset is done by run_deep_research.
-
-        # Try to show the final report if available after stopping
-        await asyncio.sleep(1.5)  # Give agent a moment to write final files potentially
-        report_file_path = None
-        if task_id and base_save_dir:
-            report_file_path = os.path.join(base_save_dir, str(task_id), "report.md")
-
-        if report_file_path and os.path.exists(report_file_path):
-            report_content = _read_file_safe(report_file_path)
-            if report_content:
-                final_update[markdown_display_comp] = gr.update(
-                    value=report_content + "\n\n---\n*Research stopped by user.*")
-                final_update[markdown_download_comp] = gr.File(value=report_file_path, label=f"Report ({task_id}.md)",
-                                                               interactive=True)
-            else:
-                final_update[markdown_display_comp] = gr.update(
-                    value="# Research Stopped\n\n*Error reading final report file after stop.*")
-        else:
-            final_update[markdown_display_comp] = gr.update(value="# Research Stopped by User")
-
-        # Keep start button disabled, run_deep_research finally block will re-enable it.
-        final_update[start_button_comp] = gr.update(interactive=False)
-
+            logger.error(f"Error calling agent.stop(): {e}", exc_info=True)
+            gr.Warning(f"Error trying to stop the agent: {e}")
     else:
-        logger.warning("Stop clicked but no active research task found.")
-        # Reset UI state just in case
-        final_update = {
-            start_button_comp: gr.update(interactive=True),
-            stop_button_comp: gr.update(interactive=False),
-            webui_manager.get_component_by_id("deep_research_agent.research_task"): gr.update(interactive=True),
-            webui_manager.get_component_by_id("deep_research_agent.resume_task_id"): gr.update(interactive=True),
-            webui_manager.get_component_by_id("deep_research_agent.max_iteration"): gr.update(interactive=True),
-            webui_manager.get_component_by_id("deep_research_agent.max_query"): gr.update(interactive=True),
-        }
+        logger.warning("Stop clicked but no active DeepResearchAgent instance found.")
+        # If no agent, just reset UI
+        ui_updates[start_button_comp] = gr.update(value="▶️ Run", interactive=True)
+        ui_updates[stop_button_comp] = gr.update(interactive=False)
+        ui_updates[status_display_comp] = gr.update(value="No active research to stop.", visible=True)
+        # Clean up manager state if no agent was found, ensuring clean state
+        webui_manager.dr_agent = None
+        webui_manager.dr_task_id = None
+        webui_manager.dr_current_task_async = None
+        return ui_updates # Early exit if no agent
 
-    return final_update
+    # If there was an asyncio task for the agent's run method
+    if async_task and not async_task.done():
+        logger.info("Waiting for agent's run task to complete after signalling stop...")
+        try:
+            # Wait for a short period for the task to acknowledge stop and finish
+            # The agent's run method's finally block should handle its cleanup.
+            await asyncio.wait_for(async_task, timeout=10.0) # Give it time to process stop
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for agent task to finish after stop. It might be stuck.")
+            ui_updates[status_display_comp] = gr.update(value="Agent stop timed out. Task might be stuck.", visible=True)
+            # Attempt to cancel the task if it's truly stuck
+            async_task.cancel()
+        except Exception as e: # Other errors during await
+            logger.error(f"Error while waiting for agent task to finish: {e}", exc_info=True)
+            ui_updates[status_display_comp] = gr.update(value=f"Error waiting for agent task: {e}", visible=True)
+
+    # Agent's run method's finally block should have executed and returned a result.
+    # The result processing (including UI updates for report) is primarily in run_deep_research's main flow.
+    # Here, we ensure UI is reset to a stoppable state.
+
+    # Try to load report, as agent might have finished one upon stopping
+    report_content_on_stop = "## Research Stopped by User\n\n"
+    report_file_path = None
+    if task_id and base_save_dir:
+        task_specific_dir = os.path.join(base_save_dir, str(task_id))
+        report_file_path = os.path.join(task_specific_dir, "report.md")
+        if os.path.exists(report_file_path):
+            content = _read_file_safe(report_file_path)
+            if content:
+                report_content_on_stop += content
+                ui_updates[markdown_download_comp] = gr.File(value=report_file_path, label=f"Report ({task_id}.md)", interactive=True)
+            else:
+                report_content_on_stop += "*Final report file was empty or unreadable.*"
+        else:
+            report_content_on_stop += "*Final report file not found.*"
+    else:
+        report_content_on_stop += "*Task ID or save directory not available to load report.*"
+
+    ui_updates[markdown_display_comp] = gr.update(value=report_content_on_stop)
+    ui_updates[status_display_comp] = gr.update(value="Research stopped.", visible=True)
+    ui_updates[start_button_comp] = gr.update(value="▶️ Run", interactive=True) # Re-enable run
+    ui_updates[stop_button_comp] = gr.update(value="⏹️ Stop", interactive=False) # Disable stop
+    ui_updates[research_task_comp] = gr.update(interactive=True)
+    ui_updates[resume_task_id_comp] = gr.update(interactive=True) # Allow new task or resume
+    ui_updates[parallel_num_comp] = gr.update(interactive=True)
+    ui_updates[save_dir_comp] = gr.update(interactive=True)
+
+    # Crucially, clear the agent from WebuiManager as the task is now considered terminal.
+    webui_manager.dr_agent = None
+    webui_manager.dr_task_id = None
+    webui_manager.dr_current_task_async = None
+    logger.info("DeepResearchAgent and its task have been stopped and cleared from WebuiManager.")
+
+    return ui_updates
 
 
 async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
@@ -407,7 +492,7 @@ def create_deep_research_agent_tab(webui_manager: WebuiManager):
         dict(
             research_task=research_task,
             parallel_num=parallel_num,
-            max_query=max_query,
+            max_query=max_query, # This is actually save_dir
             start_button=start_button,
             stop_button=stop_button,
             markdown_display=markdown_display,
@@ -417,41 +502,189 @@ def create_deep_research_agent_tab(webui_manager: WebuiManager):
             mcp_server_config=mcp_server_config,
         )
     )
-    webui_manager.add_components("deep_research_agent", tab_components)
-    webui_manager.init_deep_research_agent()
+    # Add new UI components to webui_manager and tab_components
+    status_display = gr.Markdown(value="Status: Idle", visible=True) # Initially visible
+    with gr.Group(visible=False) as confirmation_group:
+        confirm_synthesis_button = gr.Button("Confirm and Proceed to Synthesis")
+    with gr.Group(visible=False) as error_feedback_group:
+        error_details_display = gr.Markdown()
+        error_feedback_choice = gr.Radio(choices=["retry", "skip", "abort"], label="Choose action for error", value="retry")
+        submit_error_feedback_button = gr.Button("Submit Feedback")
 
-    async def update_wrapper(mcp_file):
-        """Wrapper for handle_pause_resume."""
-        update_dict = await update_mcp_server(mcp_file, webui_manager)
-        yield update_dict
+    tab_components.update({
+        "status_display": status_display,
+        "confirmation_group": confirmation_group,
+        "confirm_synthesis_button": confirm_synthesis_button,
+        "error_feedback_group": error_feedback_group,
+        "error_details_display": error_details_display,
+        "error_feedback_choice": error_feedback_choice,
+        "submit_error_feedback_button": submit_error_feedback_button,
+    })
+
+    webui_manager.add_components("deep_research_agent", tab_components)
+    webui_manager.init_deep_research_agent() # Initializes self.dr_agent etc.
+
+    async def update_mcp_wrapper(mcp_file):
+        # This function seems to be misnamed in the original, it's for MCP server update
+        # It might be better named handle_mcp_upload or similar
+        config_str, visibility_update = await update_mcp_server(mcp_file, webui_manager)
+        return {mcp_server_config: config_str, mcp_server_config: visibility_update}
+
 
     mcp_json_file.change(
-        update_wrapper,
+        fn=update_mcp_wrapper, # Corrected name if it's for MCP
         inputs=[mcp_json_file],
-        outputs=[mcp_server_config, mcp_server_config]
+        outputs=[mcp_server_config, mcp_server_config] # Ensure this matches what update_mcp_server returns
     )
 
-    dr_tab_outputs = list(tab_components.values())
-    all_managed_inputs = set(webui_manager.get_components())
+    # Consolidate all components that can be updated by handlers
+    # Order matters for Gradio output mapping if not returning a dict keyed by component
+    # It's safer to return dicts from handlers: {component_to_update: gr.update(...)}
+    # For now, assuming dr_tab_outputs includes all relevant components for updates.
+    # We need to add the new components to this list if not using dict returns.
+
+    # Get all components managed by WebuiManager that might need updating
+    # This includes components from other tabs if they are in webui_manager.id_to_component
+    all_managed_components_list = list(webui_manager.id_to_component.values())
+
 
     # --- Define Event Handler Wrappers ---
-    async def start_wrapper(comps: Dict[Component, Any]) -> AsyncGenerator[Dict[Component, Any], None]:
-        async for update in run_deep_research(webui_manager, comps):
-            yield update
+    # These wrappers will now collect all inputs from the UI that might be needed
+    # and pass them to the core logic. They then yield dictionaries of component updates.
 
-    async def stop_wrapper() -> AsyncGenerator[Dict[Component, Any], None]:
+    async def handle_run_button_click(comps: Dict[Component, Any]) -> AsyncGenerator[Dict[Component, Any], None]:
+        # `comps` is already a dictionary of all managed components from `all_managed_inputs`
+        async for update_dict in run_deep_research(webui_manager, comps):
+            yield update_dict
+
+    async def handle_stop_button_click() -> AsyncGenerator[Dict[Component, Any], None]:
         update_dict = await stop_deep_research(webui_manager)
         yield update_dict
 
+    async def handle_confirm_synthesis_click() -> AsyncGenerator[Dict[Component, Any], None]:
+        logger.info("Confirm Synthesis button clicked.")
+        # Disable interaction groups immediately
+        yield {
+            confirmation_group_comp: gr.update(visible=False),
+            status_display_comp: gr.update(value="Confirmation received. Resuming for synthesis..."),
+        }
+        result = await webui_manager.provide_final_confirmation_to_agent()
+
+        # Process result and update UI (similar to terminal states in run_deep_research)
+        ui_updates = {
+            start_button_comp: gr.update(interactive=True), # Re-enable run button
+            stop_button_comp: gr.update(interactive=False),
+            research_task_comp: gr.update(interactive=True),
+            resume_task_id_comp: gr.update(interactive=True, value=result.get("task_id","")),
+            status_display_comp: gr.update(value=f"Status: {result.get('status')}. {result.get('message', '')}", visible=True),
+            confirmation_group_comp: gr.update(visible=False),
+            error_feedback_group_comp: gr.update(visible=False),
+        }
+        if result.get("status") == "completed" and result.get("final_state", {}).get("final_report"):
+            ui_updates[markdown_display_comp] = gr.update(value=result["final_state"]["final_report"])
+            if result.get("task_id") and webui_manager.dr_save_dir:
+                report_file = os.path.join(webui_manager.dr_save_dir, str(result["task_id"]), "report.md")
+                if os.path.exists(report_file):
+                     ui_updates[markdown_download_comp] = gr.File(value=report_file, label=f"Report ({result['task_id']}.md)", interactive=True)
+        elif result.get("status") == "error":
+            ui_updates[markdown_display_comp] = gr.update(value=f"# Synthesis Failed\n\nError: {result.get('message')}")
+        yield ui_updates
+
+    async def handle_submit_error_feedback_click(feedback_choice: str) -> AsyncGenerator[Dict[Component, Any], None]:
+        logger.info(f"Submit Error Feedback button clicked. Choice: {feedback_choice}")
+        # Disable interaction groups immediately
+        yield {
+            error_feedback_group_comp: gr.update(visible=False),
+            status_display_comp: gr.update(value=f"Feedback '{feedback_choice}' received. Resuming..."),
+        }
+        result = await webui_manager.provide_error_feedback_to_agent(feedback_choice)
+
+        ui_updates = { # Default to re-enabling main controls if terminal
+            start_button_comp: gr.update(interactive=True),
+            stop_button_comp: gr.update(interactive=False),
+            research_task_comp: gr.update(interactive=True),
+            resume_task_id_comp: gr.update(interactive=True, value=result.get("task_id","")),
+        }
+
+        status = result.get("status")
+        if status == "awaiting_confirmation":
+            ui_updates[status_display_comp] = gr.update(value=result.get("message", "Awaiting final confirmation."), visible=True)
+            ui_updates[confirmation_group_comp] = gr.update(visible=True)
+            ui_updates[error_feedback_group_comp] = gr.update(visible=False)
+            ui_updates[start_button_comp] = gr.update(interactive=False) # Keep run disabled
+            ui_updates[research_task_comp] = gr.update(interactive=False)
+            ui_updates[resume_task_id_comp] = gr.update(interactive=False)
+        elif status == "awaiting_error_feedback":
+            ui_updates[status_display_comp] = gr.update(value=result.get("message", "Paused due to an error."), visible=True)
+            ui_updates[error_details_display_comp] = gr.update(value=f"**Error in {result.get('current_error_node_origin', 'N/A')}:**\n\n```\n{result.get('error_details', 'No details provided.')}\n```")
+            ui_updates[error_feedback_group_comp] = gr.update(visible=True)
+            ui_updates[confirmation_group_comp] = gr.update(visible=False)
+            ui_updates[start_button_comp] = gr.update(interactive=False) # Keep run disabled
+            ui_updates[research_task_comp] = gr.update(interactive=False)
+            ui_updates[resume_task_id_comp] = gr.update(interactive=False)
+        else: # Terminal states
+            ui_updates[status_display_comp] = gr.update(value=f"Status: {status}. {result.get('message', '')}", visible=True)
+            ui_updates[confirmation_group_comp] = gr.update(visible=False)
+            ui_updates[error_feedback_group_comp] = gr.update(visible=False)
+            if status == "completed" and result.get("final_state", {}).get("final_report"):
+                ui_updates[markdown_display_comp] = gr.update(value=result["final_state"]["final_report"])
+                if result.get("task_id") and webui_manager.dr_save_dir:
+                    report_file = os.path.join(webui_manager.dr_save_dir, str(result["task_id"]), "report.md")
+                    if os.path.exists(report_file):
+                        ui_updates[markdown_download_comp] = gr.File(value=report_file, label=f"Report ({result['task_id']}.md)", interactive=True)
+            elif status == "error":
+                 ui_updates[markdown_display_comp] = gr.update(value=f"# Task Failed after Feedback\n\nError: {result.get('message')}")
+            elif result.get("final_state", {}).get("final_report"): # E.g. for skipped then completed
+                 ui_updates[markdown_display_comp] = gr.update(value=result["final_state"]["final_report"])
+                 if result.get("task_id") and webui_manager.dr_save_dir:
+                    report_file = os.path.join(webui_manager.dr_save_dir, str(result["task_id"]), "report.md")
+                    if os.path.exists(report_file):
+                        ui_updates[markdown_download_comp] = gr.File(value=report_file, label=f"Report ({result['task_id']}.md)", interactive=True)
+        yield ui_updates
+
     # --- Connect Handlers ---
+    # Inputs for start_button are all components webui_manager is aware of.
+    # Outputs are all components in the current tab that might be updated.
+    # Using dicts for outputs is more robust.
+
+    # The `inputs` for `start_button.click` should be `webui_manager.get_components()`
+    # to ensure all settings from other tabs are correctly passed.
+    # The `outputs` should be a list of all components that can be affected by `run_deep_research`.
+    # This includes the new UI elements.
+
+    # Define the list of ALL components that any of these handlers might update.
+    # This is important for Gradio's .click() method when not returning a dict.
+    # However, it's better practice for handlers to yield dicts of {component: gr.update()},
+    # then the `outputs` list in .click() can be minimal or just those components.
+    # For safety, list all potentially affected components if not using dict returns consistently.
+
+    output_components_for_handlers = [
+        start_button, stop_button, research_task, resume_task_id, parallel_num, max_query, # max_query is save_dir
+        markdown_display, markdown_download, status_display,
+        confirmation_group, error_feedback_group, error_details_display
+    ]
+
+
     start_button.click(
-        fn=start_wrapper,
-        inputs=all_managed_inputs,
-        outputs=dr_tab_outputs
+        fn=handle_run_button_click,
+        inputs=webui_manager.get_components(), # Pass all managed components as dict
+        outputs=output_components_for_handlers # Explicitly list outputs
     )
 
     stop_button.click(
-        fn=stop_wrapper,
+        fn=handle_stop_button_click,
         inputs=None,
-        outputs=dr_tab_outputs
+        outputs=output_components_for_handlers
+    )
+
+    confirm_synthesis_button.click(
+        fn=handle_confirm_synthesis_click,
+        inputs=None, # Task_id will be taken from webui_manager
+        outputs=output_components_for_handlers
+    )
+
+    submit_error_feedback_button.click(
+        fn=handle_submit_error_feedback_click,
+        inputs=[error_feedback_choice], # Pass the choice from radio
+        outputs=output_components_for_handlers
     )
