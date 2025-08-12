@@ -1,0 +1,25 @@
+{
+    "name": "Reliable Click Demo",
+    "description": "Demonstrates using the reliable_click custom skill",
+    "steps": [
+      {
+        "action": "navigate_to",
+        "url": "https://torath.gov.eg"
+      },
+      {
+        "action": "reliable_click",
+        "selector": "a[href='/about']",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "action": "wait_for_navigation",
+        "timeout": 5000
+      },
+      {
+        "action": "assert_url_contains",
+        "expected": "/about"
+      }
+    ]
+  }
+  
