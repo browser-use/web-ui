@@ -6,20 +6,19 @@ import uuid
 from typing import Any, AsyncGenerator, Dict, Optional
 
 import gradio as gr
+from browser_use import BrowserSession,BrowserProfile
 
 # from browser_use.agent.service import Agent
 from browser_use.agent.views import (
     AgentHistoryList,
     AgentOutput,
 )
-from browser_use.browser.browser import BrowserConfig
-from browser_use.browser.context import BrowserContext, BrowserContextConfig
-from browser_use.browser.views import BrowserState
+from browser_use.browser.profile import ViewportSize
+from browser_use.browser.views import BrowserStateSummary
 from gradio.components import Component
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from src.agent.browser_use.browser_use_agent import BrowserUseAgent
-from src.browser.custom_browser import CustomBrowser
 from src.controller.custom_controller import CustomController
 from src.utils import llm_provider
 from src.webui.webui_manager import WebuiManager
@@ -132,7 +131,7 @@ def _format_agent_output(model_output: AgentOutput) -> str:
 
 
 async def _handle_new_step(
-        webui_manager: WebuiManager, state: BrowserState, output: AgentOutput, step_num: int
+        webui_manager: WebuiManager, state: BrowserStateSummary, output: AgentOutput, step_num: int
 ):
     """Callback for each step taken by the agent, including screenshot display."""
 
@@ -222,7 +221,7 @@ def _handle_done(webui_manager: WebuiManager, history: AgentHistoryList):
 
 
 async def _ask_assistant_callback(
-        webui_manager: WebuiManager, query: str, browser_context: BrowserContext
+        webui_manager: WebuiManager, query: str, browser_session: BrowserSession
 ) -> Dict[str, Any]:
     """Callback triggered by the agent's ask_for_assistant action."""
     logger.info("Agent requires assistance. Waiting for user input.")
@@ -422,9 +421,9 @@ async def run_agent_task(
 
     # Pass the webui_manager instance to the callback when wrapping it
     async def ask_callback_wrapper(
-            query: str, browser_context: BrowserContext
+            query: str, browser_session: BrowserSession
     ) -> Dict[str, Any]:
-        return await _ask_assistant_callback(webui_manager, query, browser_context)
+        return await _ask_assistant_callback(webui_manager, query, browser_session)
 
     if not webui_manager.bu_controller:
         webui_manager.bu_controller = CustomController(
@@ -438,61 +437,41 @@ async def run_agent_task(
     try:
         # Close existing resources if not keeping open
         if not keep_browser_open:
-            if webui_manager.bu_browser_context:
-                logger.info("Closing previous browser context.")
-                await webui_manager.bu_browser_context.close()
-                webui_manager.bu_browser_context = None
-            if webui_manager.bu_browser:
-                logger.info("Closing previous browser.")
-                await webui_manager.bu_browser.close()
-                webui_manager.bu_browser = None
+            if webui_manager.bu_browser_session:
+                logger.info("Closing previous browser session.")
+                await webui_manager.bu_browser_session.kill()
+                webui_manager.bu_browser_session = None
 
-        # Create Browser if needed
-        if not webui_manager.bu_browser:
-            logger.info("Launching new browser instance.")
-            extra_args = []
+        # Create Browser Session if needed
+        if not webui_manager.bu_browser_session:
+            logger.info("Launching new browser session.")
+            browser_user_data = None
             if use_own_browser:
                 browser_binary_path = os.getenv("BROWSER_PATH", None) or browser_binary_path
                 if browser_binary_path == "":
                     browser_binary_path = None
                 browser_user_data = browser_user_data_dir or os.getenv("BROWSER_USER_DATA", None)
-                if browser_user_data:
-                    extra_args += [f"--user-data-dir={browser_user_data}"]
             else:
                 browser_binary_path = None
-
-            webui_manager.bu_browser = CustomBrowser(
-                config=BrowserConfig(
-                    headless=headless,
-                    disable_security=disable_security,
-                    browser_binary_path=browser_binary_path,
-                    extra_browser_args=extra_args,
-                    wss_url=wss_url,
-                    cdp_url=cdp_url,
-                    new_context_config=BrowserContextConfig(
-                        window_width=window_w,
-                        window_height=window_h,
-                    )
-                )
-            )
-
-        # Create Context if needed
-        if not webui_manager.bu_browser_context:
-            logger.info("Creating new browser context.")
-            context_config = BrowserContextConfig(
-                trace_path=save_trace_path if save_trace_path else None,
-                save_recording_path=save_recording_path
+            browser_profile = BrowserProfile(
+                keep_alive=keep_browser_open,
+                headless=headless,
+                disable_security=disable_security,
+                executable_path=browser_binary_path,
+                user_data_dir=browser_user_data,
+                window_size=ViewportSize(width=window_w, height=window_h),
+                traces_dir=save_trace_path if save_trace_path else None,
+                record_video_dir=save_recording_path
                 if save_recording_path
                 else None,
-                save_downloads_path=save_download_path if save_download_path else None,
-                window_height=window_h,
-                window_width=window_w,
+                downloads_path=save_download_path if save_download_path else None,
             )
-            if not webui_manager.bu_browser:
-                raise ValueError("Browser not initialized, cannot create context.")
-            webui_manager.bu_browser_context = (
-                await webui_manager.bu_browser.new_context(config=context_config)
+            webui_manager.bu_browser_session = BrowserSession(
+                browser_profile=browser_profile,
+                wss_url=wss_url,
+                cdp_url=cdp_url,
             )
+            await webui_manager.bu_browser_session.start()
 
         # --- 5. Initialize or Update Agent ---
         webui_manager.bu_agent_task_id = str(uuid.uuid4())  # New ID for this task run
@@ -513,7 +492,7 @@ async def run_agent_task(
 
         # Pass the webui_manager to callbacks when wrapping them
         async def step_callback_wrapper(
-                state: BrowserState, output: AgentOutput, step_num: int
+                state: BrowserStateSummary, output: AgentOutput, step_num: int
         ):
             await _handle_new_step(webui_manager, state, output, step_num)
 
@@ -522,15 +501,14 @@ async def run_agent_task(
 
         if not webui_manager.bu_agent:
             logger.info(f"Initializing new agent for task: {task}")
-            if not webui_manager.bu_browser or not webui_manager.bu_browser_context:
+            if not webui_manager.bu_browser_session:
                 raise ValueError(
-                    "Browser or Context not initialized, cannot create agent."
+                    "Browser Session not initialized, cannot create agent."
                 )
             webui_manager.bu_agent = BrowserUseAgent(
                 task=task,
                 llm=main_llm,
-                browser=webui_manager.bu_browser,
-                browser_context=webui_manager.bu_browser_context,
+                browser_session=webui_manager.bu_browser_session,
                 controller=webui_manager.bu_controller,
                 register_new_step_callback=step_callback_wrapper,
                 register_done_callback=done_callback_wrapper,
@@ -550,8 +528,7 @@ async def run_agent_task(
             webui_manager.bu_agent.state.agent_id = webui_manager.bu_agent_task_id
             webui_manager.bu_agent.add_new_task(task)
             webui_manager.bu_agent.settings.generate_gif = gif_path
-            webui_manager.bu_agent.browser = webui_manager.bu_browser
-            webui_manager.bu_agent.browser_context = webui_manager.bu_browser_context
+            webui_manager.bu_agent.browser_session = webui_manager.bu_browser_session
             webui_manager.bu_agent.controller = webui_manager.bu_controller
 
         # --- 6. Run Agent Task and Stream Updates ---
@@ -657,10 +634,10 @@ async def run_agent_task(
                 last_chat_len = len(webui_manager.bu_chat_history)
 
             # Update Browser View
-            if headless and webui_manager.bu_browser_context:
+            if headless and webui_manager.bu_browser_session:
                 try:
                     screenshot_b64 = (
-                        await webui_manager.bu_browser_context.take_screenshot()
+                        await webui_manager.bu_browser_session.take_screenshot()
                     )
                     if screenshot_b64:
                         html_content = f'<img src="data:image/jpeg;base64,{screenshot_b64}" style="width:{stream_vw}vw; height:{stream_vh}vh ; border:1px solid #ccc;">'
@@ -742,14 +719,10 @@ async def run_agent_task(
 
             # Close browser/context if requested
             if should_close_browser_on_finish:
-                if webui_manager.bu_browser_context:
-                    logger.info("Closing browser context after task.")
-                    await webui_manager.bu_browser_context.close()
-                    webui_manager.bu_browser_context = None
-                if webui_manager.bu_browser:
-                    logger.info("Closing browser after task.")
-                    await webui_manager.bu_browser.close()
-                    webui_manager.bu_browser = None
+                if webui_manager.bu_browser_session:
+                    logger.info("Closing browser session after task.")
+                    await webui_manager.bu_browser_session.kill()
+                    webui_manager.bu_browser_session = None
 
             # --- 8. Final UI Update ---
             final_update.update(

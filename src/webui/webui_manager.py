@@ -10,11 +10,8 @@ import asyncio
 import time
 
 from gradio.components import Component
-from browser_use.browser.browser import Browser
-from browser_use.browser.context import BrowserContext
+from browser_use.browser import BrowserSession
 from browser_use.agent.service import Agent
-from src.browser.custom_browser import CustomBrowser
-from src.browser.custom_context import CustomBrowserContext
 from src.controller.custom_controller import CustomController
 from src.agent.deep_research.deep_research_agent import DeepResearchAgent
 
@@ -32,8 +29,7 @@ class WebuiManager:
         init browser use agent
         """
         self.bu_agent: Optional[Agent] = None
-        self.bu_browser: Optional[CustomBrowser] = None
-        self.bu_browser_context: Optional[CustomBrowserContext] = None
+        self.bu_browser_session: Optional[BrowserSession] = None
         self.bu_controller: Optional[CustomController] = None
         self.bu_chat_history: List[Dict[str, Optional[str]]] = []
         self.bu_response_event: Optional[asyncio.Event] = None

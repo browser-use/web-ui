@@ -1,4 +1,4 @@
-browser-use==0.1.48
+browser-use==0.2.7
 pyperclip==1.9.0
 gradio==5.27.0
 json-repair
