@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Set platform for multi-arch builds (Docker Buildx will set this)
 ARG TARGETPLATFORM
