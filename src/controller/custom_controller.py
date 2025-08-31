@@ -106,6 +106,23 @@ class CustomController(Controller):
                 logger.info(msg)
                 return ActionResult(error=msg)
 
+        # --- Dynamically register skills defined in `src.custom_skills` ---
+        # This allows JSON scenarios to call actions like "goto", "clickCss", etc.
+        from src.custom_skills import CUSTOM_SKILLS
+        from typing import Any
+
+        for _skill_name, _skill_func in CUSTOM_SKILLS.items():
+            # Create a wrapper that adapts the controller action signature
+            # Add explicit type annotations to avoid Pydantic JSON schema errors
+            # Avoid leading underscore in function name to prevent Pydantic errors
+            async def skill_wrapper(*args: Any, browser: BrowserContext, _func=_skill_func) -> Dict[str, Any]:
+                # Original skill expects (ctx, args_list)
+                return await _func(browser, list(args))
+
+            # Avoid overwriting if an action with the same name already exists
+            if _skill_name not in self.registry.registry.actions:
+                self.registry.action(_skill_name)(skill_wrapper)
+
     @time_execution_sync('--act')
     async def act(
             self,
