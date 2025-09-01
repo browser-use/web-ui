@@ -45,10 +45,11 @@ class WebuiManager:
         """
         init deep research agent
         """
-        self.dr_agent: Optional[DeepResearchAgent] = None
-        self.dr_current_task = None
-        self.dr_agent_task_id: Optional[str] = None
+        self.dr_agent: Optional[DeepResearchAgent] = None # This will be our active agent
+        self.dr_current_task_async: Optional[asyncio.Task] = None # Corresponds to dr_current_task, renamed for clarity
+        self.dr_task_id: Optional[str] = None # Corresponds to dr_agent_task_id, used for UI and agent interaction
         self.dr_save_dir: Optional[str] = None
+        # active_deep_research_agent and active_deep_research_task_id are effectively self.dr_agent and self.dr_task_id
 
     def add_components(self, tab_name: str, components_dict: dict[str, "Component"]) -> None:
         """
@@ -120,3 +121,59 @@ class WebuiManager:
             }
         )
         yield update_components
+
+    async def provide_final_confirmation_to_agent(self) -> Dict[str, Any]:
+        """
+        Provides final confirmation to the currently active DeepResearchAgent.
+        """
+        logger.info(f"Attempting to provide final confirmation for task_id: {self.dr_task_id}")
+        if not self.dr_agent or not self.dr_task_id:
+            logger.warning("No active DeepResearchAgent or task_id to provide confirmation to.")
+            return {"status": "error", "message": "No active research task found for confirmation."}
+
+        try:
+            result = await self.dr_agent.provide_final_confirmation()
+            logger.info(f"Confirmation result for task {self.dr_task_id}: {result.get('status')}")
+
+            # If the agent is no longer awaiting confirmation or error, and is in a terminal state
+            if result.get("status") not in ["awaiting_confirmation", "awaiting_error_feedback"]:
+                logger.info(f"Task {self.dr_task_id} reached terminal state after confirmation. Clearing active agent.")
+                self.dr_agent = None
+                self.dr_task_id = None
+                self.dr_current_task_async = None
+            return result
+        except Exception as e:
+            logger.error(f"Error providing final confirmation to agent for task {self.dr_task_id}: {e}", exc_info=True)
+            # Consider clearing agent if it's in an unrecoverable state
+            self.dr_agent = None
+            self.dr_task_id = None
+            self.dr_current_task_async = None
+            return {"status": "error", "message": f"Failed to provide final confirmation: {e}"}
+
+    async def provide_error_feedback_to_agent(self, feedback: str) -> Dict[str, Any]:
+        """
+        Provides error feedback to the currently active DeepResearchAgent.
+        """
+        logger.info(f"Attempting to provide error feedback '{feedback}' for task_id: {self.dr_task_id}")
+        if not self.dr_agent or not self.dr_task_id:
+            logger.warning("No active DeepResearchAgent or task_id to provide error feedback to.")
+            return {"status": "error", "message": "No active research task found for error feedback."}
+
+        try:
+            result = await self.dr_agent.provide_error_feedback(feedback)
+            logger.info(f"Error feedback result for task {self.dr_task_id} with feedback '{feedback}': {result.get('status')}")
+
+            # If the agent is no longer awaiting confirmation or error, and is in a terminal state
+            if result.get("status") not in ["awaiting_confirmation", "awaiting_error_feedback"]:
+                logger.info(f"Task {self.dr_task_id} reached terminal state after error feedback. Clearing active agent.")
+                self.dr_agent = None
+                self.dr_task_id = None
+                self.dr_current_task_async = None
+            return result
+        except Exception as e:
+            logger.error(f"Error providing error feedback to agent for task {self.dr_task_id}: {e}", exc_info=True)
+            # Consider clearing agent if it's in an unrecoverable state
+            self.dr_agent = None
+            self.dr_task_id = None
+            self.dr_current_task_async = None
+            return {"status": "error", "message": f"Failed to provide error feedback: {e}"}
