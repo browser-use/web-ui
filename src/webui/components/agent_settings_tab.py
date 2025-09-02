@@ -71,7 +71,7 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
             llm_model_name = gr.Dropdown(
                 label="LLM Model Name",
                 choices=config.model_names[os.getenv("DEFAULT_LLM", "openai")],
-                value=config.model_names[os.getenv("DEFAULT_LLM", "openai")][0],
+                value=os.getenv("DEFAULT_LLM_MODEL", config.model_names[os.getenv("DEFAULT_LLM", "openai")][0]),
                 interactive=True,
                 allow_custom_value=True,
                 info="Select a model in the dropdown options or directly type a custom model name"
