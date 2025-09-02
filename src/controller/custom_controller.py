@@ -2,9 +2,11 @@ import pdb
 
 import pyperclip
 from typing import Optional, Type, Callable, Dict, Any, Union, Awaitable, TypeVar
+
+from browser_use import BrowserSession
 from pydantic import BaseModel
 from browser_use.agent.views import ActionResult
-from browser_use.browser.context import BrowserContext
+from browser_use import BrowserSession
 from browser_use.controller.service import Controller, DoneAction
 from browser_use.controller.registry.service import Registry, RegisteredAction
 from main_content_extractor import MainContentExtractor
@@ -39,8 +41,8 @@ Context = TypeVar('Context')
 class CustomController(Controller):
     def __init__(self, exclude_actions: list[str] = [],
                  output_model: Optional[Type[BaseModel]] = None,
-                 ask_assistant_callback: Optional[Union[Callable[[str, BrowserContext], Dict[str, Any]], Callable[
-                     [str, BrowserContext], Awaitable[Dict[str, Any]]]]] = None,
+                 ask_assistant_callback: Optional[Union[Callable[[str, BrowserSession], Dict[str, Any]], Callable[
+                     [str, BrowserSession], Awaitable[Dict[str, Any]]]]] = None,
                  ):
         super().__init__(exclude_actions=exclude_actions, output_model=output_model)
         self._register_custom_actions()
@@ -57,7 +59,7 @@ class CustomController(Controller):
             "requiring subjective human judgment, needing a physical action performed, encountering complex CAPTCHAs, "
             "or facing limitations in your capabilities – you must request human assistance."
         )
-        async def ask_for_assistant(query: str, browser: BrowserContext):
+        async def ask_for_assistant(query: str, browser: BrowserSession):
             if self.ask_assistant_callback:
                 if inspect.iscoroutinefunction(self.ask_assistant_callback):
                     user_response = await self.ask_assistant_callback(query, browser)
@@ -73,7 +75,7 @@ class CustomController(Controller):
         @self.registry.action(
             'Upload file to interactive element with file path ',
         )
-        async def upload_file(index: int, path: str, browser: BrowserContext, available_file_paths: list[str]):
+        async def upload_file(index: int, path: str, browser: BrowserSession, available_file_paths: list[str]):
             if path not in available_file_paths:
                 return ActionResult(error=f'File path {path} is not available')
 
@@ -110,7 +112,7 @@ class CustomController(Controller):
     async def act(
             self,
             action: ActionModel,
-            browser_context: Optional[BrowserContext] = None,
+            browser_session: Optional[BrowserSession] = None,
             #
             page_extraction_llm: Optional[BaseChatModel] = None,
             sensitive_data: Optional[Dict[str, str]] = None,
@@ -132,7 +134,7 @@ class CustomController(Controller):
                         result = await self.registry.execute_action(
                             action_name,
                             params,
-                            browser=browser_context,
+                            browser_session=browser_session,
                             page_extraction_llm=page_extraction_llm,
                             sensitive_data=sensitive_data,
                             available_file_paths=available_file_paths,
