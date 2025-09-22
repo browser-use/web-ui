@@ -91,7 +91,7 @@ Model Context Protocol (MCP) tools are dynamically registered via `setup_mcp_cli
 - Use `use_own_browser=True` for existing Chrome profiles
 
 ## Key Dependencies
-- `browser-use==0.1.48`: Core browser automation
+- `browser-use>=0.1.48,<0.2.0`: Core browser automation
 - `gradio==5.27.0`: Web UI framework
 - `langchain-*`: LLM provider adapters
 - `playwright`: Browser automation backend
