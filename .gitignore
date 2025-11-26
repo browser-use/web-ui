@@ -123,6 +123,9 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
+.env.development
+.env.production
 .venv
 env/
 venv/
@@ -130,6 +133,7 @@ ENV/
 env.bak/
 venv.bak/
 test_env/
+myenv
 
 
 # Spyder project settings
@@ -177,3 +181,28 @@ AgentHistory.json
 cv_04_24.pdf
 AgentHistoryList.json
 *.gif
+
+# For Sharing (.pem files)
+.gradio/
+
+# For Docker
+# data/  # Commented out - we now use data/ for settings
+
+# Settings data directory (keep structure, ignore content)
+data/*
+!data/.gitkeep
+!data/README.md
+
+# For Config Files (Current Settings)
+.config.pkl
+*.pdf
+
+# MCP Configuration (User-specific)
+mcp.json
+data/mcp.json
+
+workflow
+
+# IDE and Editor Config Directories
+.claude/
+.cursor/

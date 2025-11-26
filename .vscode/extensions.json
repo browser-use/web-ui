@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "charliermarsh.ruff",
+    "astral-sh.ty",
+    "ms-python.python",
+    "ms-python.debugpy",
+    "tamasfe.even-better-toml",
+    "EditorConfig.EditorConfig",
+    "ms-azuretools.vscode-docker"
+  ]
+}

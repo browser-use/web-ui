@@ -1,0 +1,108 @@
+[project]
+authors = [
+    { name = "Browser Use Team", email = "contact@browser-use.com" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+description = "WebUI for browser-use with expanded LLM support and custom browser integration (Windows-optimized with UV)"
+keywords = [ "browser-use", "ai-agent", "web-ui", "automation", "llm", "windows", "uv" ]
+license = { text = "MIT" }
+maintainers = [
+    { name = "Shaun", email = "simpleflowworks@gmail.com" },
+]
+name = "web-ui"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+version = "0.1.0"
+
+dependencies = [
+    "browser-use==0.1.48",
+    "pyperclip>=1.9.0",
+    "gradio>=5.27.0",
+    "json-repair>=0.25.0",
+    "langchain-mistralai>=0.2.4",
+    "MainContentExtractor>=0.0.4",
+    "langchain-ibm>=0.3.10",
+    "langchain_mcp_adapters>=0.0.9",
+    "langgraph>=0.3.34",
+    "langchain-community>=0.3.0",
+    "playwright>=1.40.0",
+    "python-dotenv>=1.0.0",
+]
+
+    [project.urls]
+    "Bug Tracker" = "https://github.com/browser-use/web-ui/issues"
+    Documentation = "https://docs.browser-use.com"
+    Homepage      = "https://github.com/browser-use/web-ui"
+    Repository    = "https://github.com/browser-use/web-ui"
+
+    [project.scripts]
+    webui = "webui:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ty>=0.0.1a23",
+]
+
+[tool.setuptools]
+# Package discovery for UV build backend
+packages = { find = { where = [ "src" ], include = [ "web_ui*" ] } }
+
+[build-system]
+build-backend = "uv_build"
+requires      = [ "uv_build>=0.9.4,<0.10.0" ] #!! AI LEAVE THIS IS CORRECT
+
+[tool.ruff]
+line-length    = 100
+target-version = "py314"
+
+    [tool.ruff.lint]
+    ignore = [
+        "E501", # line too long (handled by formatter)
+        "B008", # do not perform function calls in argument defaults
+        "C901", # too complex
+    ]
+    select = [
+        "E",  # pycodestyle errors
+        "W",  # pycodestyle warnings
+        "F",  # pyflakes
+        "I",  # isort
+        "B",  # flake8-bugbear
+        "C4", # flake8-comprehensions
+        "UP", # pyupgrade
+    ]
+
+    [tool.ruff.format]
+    docstring-code-format = true
+    indent-style          = "space"
+    quote-style           = "double"
+
+        [tool.ruff.lint.per-file-ignores]
+        "__init__.py" = [ "F401" ]
+
+[tool.pytest.ini_options]
+asyncio_mode     = "auto"
+python_classes   = [ "Test*" ]
+python_files     = [ "test_*.py" ]
+python_functions = [ "test_*" ]
+testpaths        = [ "tests" ]
+
+[tool.ty]
+# ty configuration - Astral's fast Rust-based type checker (alpha version)
+# Note: ty is still in alpha (0.0.1a23) - expect potential bugs and missing features
+# Python 3.14t support will be configured via runtime environment

@@ -1,0 +1,288 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "UV: Sync Dependencies",
+      "type": "shell",
+      "command": "uv",
+      "args": ["sync", "--all-groups"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "echo": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "UV: Install Playwright Browsers",
+      "type": "shell",
+      "command": "playwright",
+      "args": ["install", "--with-deps"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "WebUI: Run (Default)",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "python", "webui.py"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "echo": true
+      },
+      "problemMatcher": [],
+      "dependsOn": []
+    },
+    {
+      "label": "WebUI: Run (Custom Port 8080)",
+      "type": "shell",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "webui.py",
+        "--ip",
+        "0.0.0.0",
+        "--port",
+        "8080"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "WebUI: Run (Theme: Soft)",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "python", "webui.py", "--theme", "Soft"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ruff: Format Code",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "ruff", "format", "."],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ruff: Check & Fix",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "ruff", "check", ".", "--fix"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ty: Type Check (Full)",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "ty", "check", "."],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": {
+        "owner": "ty",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(error|warning):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Ty: Type Check (Watch Mode)",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "ty", "check", ".", "--watch"],
+      "group": "build",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "ty",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(error|warning):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^Checking",
+          "endsPattern": "^(Found|No errors)"
+        }
+      }
+    },
+    {
+      "label": "Ty: Type Check (Current File)",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "ty", "check", "${file}"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": {
+        "owner": "ty",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(error|warning):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Ty: Type Check (Verbose)",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "ty", "check", ".", "--verbose"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest: Run All Tests",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "pytest", "-v"],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest: Run with Coverage",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "pytest", "--cov=src", "--cov-report=html", "-v"],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Build Image",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "up", "--build"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Code Quality: Full Check",
+      "dependsOn": [
+        "Ruff: Check & Fix",
+        "Ty: Type Check (Full)",
+        "Pytest: Run All Tests"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup: Complete Environment",
+      "dependsOn": ["UV: Sync Dependencies", "UV: Install Playwright Browsers"],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Kill Port 7788",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "$line = netstat -ano | findstr :7788 | Select-Object -First 1; if ($line) { $tokens = -split $line.Trim(); $processId = $tokens[-1]; Write-Host \"Killing process $processId on port 7788...\"; taskkill /PID $processId /F 2>&1 | Out-Null; Write-Host \"Process killed successfully.\" } else { Write-Host \"No process found on port 7788.\" }"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Kill Port 8080",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "$line = netstat -ano | findstr :8080 | Select-Object -First 1; if ($line) { $tokens = -split $line.Trim(); $processId = $tokens[-1]; Write-Host \"Killing process $processId on port 8080...\"; taskkill /PID $processId /F 2>&1 | Out-Null; Write-Host \"Process killed successfully.\" } else { Write-Host \"No process found on port 8080.\" }"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  // Python configuration
+  "python.analysis.typeCheckingMode": "basic",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+
+  // Ruff formatter and linter
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // Ruff configuration
+  "ruff.lineLength": 100,
+  "ruff.lint.enable": true,
+  "ruff.format.enable": true,
+
+  // ty type checker configuration
+  "ty.enable": true,
+  "ty.path": "${workspaceFolder}/.venv/Scripts/ty.exe",
+
+  // UV package manager
+  "python.terminal.activateEnvironment": true,
+
+  // File associations
+  "files.associations": {
+    "*.toml": "toml",
+    ".env*": "properties"
+  },
+
+  // Exclude from search/watch
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/*.pyo": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/uv.lock": false
+  },
+
+  // Terminal settings for UV
+  "terminal.integrated.env.windows": {
+    "UV_SYSTEM_PYTHON": "0"
+  }
+}

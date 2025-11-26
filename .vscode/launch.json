@@ -1,0 +1,73 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "WebUI: Run (Debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "webui",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "serverReadyAction": {
+        "pattern": "Running on.*localhost:([0-9]+)",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "WebUI: Run on Port 8080 (Debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/webui.py",
+      "args": ["--ip", "0.0.0.0", "--port", "8080"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "serverReadyAction": {
+        "pattern": "Running on.*localhost:([0-9]+)",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "WebUI: Custom Theme (Debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/webui.py",
+      "args": ["--theme", "Ocean", "--ip", "127.0.0.1", "--port", "7788"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "serverReadyAction": {
+        "pattern": "Running on.*localhost:([0-9]+)",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Pytest: Debug Current Test File",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v", "-s"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Pytest: Debug All Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}
