@@ -68,7 +68,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
       # - ./my_chrome_data:/app/data/chrome_data # Optional: persist browser data
     restart: unless-stopped
-    shm_size: '2gb'
+    shm_size: "2gb"
     cap_add:
       - SYS_ADMIN
     tmpfs:

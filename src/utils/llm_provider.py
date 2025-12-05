@@ -349,6 +349,7 @@ def get_llm_model(provider: str, **kwargs):
             base_url=base_url,
             model_name=kwargs.get("model_name", "Qwen/QwQ-32B"),
             temperature=kwargs.get("temperature", 0.0),
+            extra_body = {"enable_thinking": False}
         )
     else:
         raise ValueError(f"Unsupported provider: {provider}")
