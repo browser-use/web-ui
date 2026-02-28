@@ -3,7 +3,9 @@ import json
 import logging
 import os
 import uuid
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
+
+from src.browser.launch_config import parse_launch_args
 
 import gradio as gr
 
@@ -451,6 +453,10 @@ async def run_agent_task(
         if not webui_manager.bu_browser:
             logger.info("Launching new browser instance.")
             extra_args = []
+            # Apply PLAYWRIGHT_LAUNCH_ARGS from env (same as startup browser via launch_config)
+            launch_args_env = os.getenv("PLAYWRIGHT_LAUNCH_ARGS", "").strip()
+            if launch_args_env:
+                extra_args.extend(parse_launch_args(launch_args_env))
             if use_own_browser:
                 browser_binary_path = os.getenv("BROWSER_PATH", None) or browser_binary_path
                 if browser_binary_path == "":
@@ -461,14 +467,21 @@ async def run_agent_task(
             else:
                 browser_binary_path = None
 
+            # Use CDP when: (1) user chose "Use Own Browser" and set cdp_url, or (2) BROWSER_CDP is set (e.g. startup browser in container)
+            effective_cdp_url = cdp_url if use_own_browser else (os.getenv("BROWSER_CDP") or None)
+            if effective_cdp_url == "":
+                effective_cdp_url = None
+            chrome_debug_port = int(os.getenv("BROWSER_DEBUGGING_PORT", "9222"))
+
             webui_manager.bu_browser = CustomBrowser(
                 config=BrowserConfig(
                     headless=headless,
                     disable_security=disable_security,
                     browser_binary_path=browser_binary_path,
                     extra_browser_args=extra_args,
+                    chrome_remote_debugging_port=chrome_debug_port,
                     wss_url=wss_url,
-                    cdp_url=cdp_url,
+                    cdp_url=effective_cdp_url,
                     new_context_config=BrowserContextConfig(
                         window_width=window_w,
                         window_height=window_h,
@@ -1066,15 +1079,35 @@ def create_browser_use_agent_tab(webui_manager: WebuiManager):
         update_dict = await handle_clear(webui_manager)
         yield update_dict
 
-    # --- Connect Event Handlers using the Wrappers --
+    # --- Connect Event Handlers using the Wrappers (api_name for stable HTTP API) ---
     run_button.click(
-        fn=submit_wrapper, inputs=all_managed_components, outputs=run_tab_outputs, trigger_mode="multiple"
+        fn=submit_wrapper,
+        inputs=all_managed_components,
+        outputs=run_tab_outputs,
+        trigger_mode="multiple",
+        api_name="run_agent",
     )
     user_input.submit(
-        fn=submit_wrapper, inputs=all_managed_components, outputs=run_tab_outputs
+        fn=submit_wrapper,
+        inputs=all_managed_components,
+        outputs=run_tab_outputs,
+        api_name="run_agent",
     )
-    stop_button.click(fn=stop_wrapper, inputs=None, outputs=run_tab_outputs)
+    stop_button.click(
+        fn=stop_wrapper,
+        inputs=None,
+        outputs=run_tab_outputs,
+        api_name="stop_agent",
+    )
     pause_resume_button.click(
-        fn=pause_resume_wrapper, inputs=None, outputs=run_tab_outputs
+        fn=pause_resume_wrapper,
+        inputs=None,
+        outputs=run_tab_outputs,
+        api_name="pause_resume_agent",
     )
-    clear_button.click(fn=clear_wrapper, inputs=None, outputs=run_tab_outputs)
+    clear_button.click(
+        fn=clear_wrapper,
+        inputs=None,
+        outputs=run_tab_outputs,
+        api_name="clear_agent",
+    )

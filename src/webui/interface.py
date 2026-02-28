@@ -1,6 +1,7 @@
 import gradio as gr
 
 from src.webui.webui_manager import WebuiManager
+from src.webui.browser_api import api_goto, api_get_url, api_get_title, api_screenshot
 from src.webui.components.agent_settings_tab import create_agent_settings_tab
 from src.webui.components.browser_settings_tab import create_browser_settings_tab
 from src.webui.components.browser_use_agent_tab import create_browser_use_agent_tab
@@ -91,5 +92,24 @@ def create_ui(theme_name="Ocean"):
 
             with gr.TabItem("📁 Load & Save Config"):
                 create_load_save_config_tab(ui_manager)
+
+        # --- Browser control API (stable names for agents/scripts) ---
+        async def goto(url: str) -> str:
+            return await api_goto(ui_manager, url)
+
+        async def get_url() -> str:
+            return await api_get_url(ui_manager)
+
+        async def get_title() -> str:
+            return await api_get_title(ui_manager)
+
+        async def screenshot() -> str:
+            out = await api_screenshot(ui_manager)
+            return out if out else "Error: Browser not open or screenshot failed. Run an agent task first."
+
+        gr.api(goto, api_name="goto")
+        gr.api(get_url, api_name="get_url")
+        gr.api(get_title, api_name="get_title")
+        gr.api(screenshot, api_name="screenshot")
 
     return demo
