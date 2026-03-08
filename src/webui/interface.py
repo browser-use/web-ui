@@ -99,6 +99,18 @@ def create_ui(theme_name="Ocean"):
             return control.value;
         }
 
+        function isSensitiveControl(componentRoot, control) {
+            const id = (componentRoot.id || "").toLowerCase();
+            return (
+                control.type === "password" ||
+                id.includes("api-key") ||
+                id.includes("apikey") ||
+                id.includes("token") ||
+                id.includes("secret") ||
+                id.includes("password")
+            );
+        }
+
         function writeControlValue(componentRoot, value) {
             const control = getPrimaryControl(componentRoot);
             if (!control) {
@@ -117,6 +129,10 @@ def create_ui(theme_name="Ocean"):
         function collectUiState() {
             const state = {};
             document.querySelectorAll("[id^='webui-']").forEach((componentRoot) => {
+                const control = getPrimaryControl(componentRoot);
+                if (!control || isSensitiveControl(componentRoot, control)) {
+                    return;
+                }
                 const value = readControlValue(componentRoot);
                 if (value !== undefined) {
                     state[componentRoot.id] = value;
@@ -151,7 +167,15 @@ def create_ui(theme_name="Ocean"):
                 });
             } catch (_) {
                 const raw = localStorage.getItem(FALLBACK_STORAGE_KEY);
-                return raw ? JSON.parse(raw) : null;
+                if (!raw) {
+                    return null;
+                }
+                try {
+                    return JSON.parse(raw);
+                } catch (_) {
+                    localStorage.removeItem(FALLBACK_STORAGE_KEY);
+                    return null;
+                }
             }
         }
 
@@ -186,6 +210,10 @@ def create_ui(theme_name="Ocean"):
                 entries.forEach(([id, value]) => {
                     const componentRoot = document.getElementById(id);
                     if (componentRoot) {
+                        const control = getPrimaryControl(componentRoot);
+                        if (control && isSensitiveControl(componentRoot, control)) {
+                            return;
+                        }
                         writeControlValue(componentRoot, value);
                     }
                 });
