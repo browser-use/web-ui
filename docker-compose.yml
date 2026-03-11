@@ -11,7 +11,7 @@ services:
       - "127.0.0.1:7788:7788"
       - "0.0.0.0:6080:6080"
       - "127.0.0.1:5901:5901"
-      # CDP: socat listens on 9222 and forwards to Chrome on 9223. Available after first agent task (Chrome starts then).
+      # CDP: socat forwards 9222 -> Chrome 9223. With LAUNCH_BROWSER_AT_STARTUP=true, browser starts at boot and CDP is available on 127.0.0.1:9222.
       - "127.0.0.1:9222:9222"
     environment:
       # LLM API Keys & Endpoints
@@ -52,7 +52,7 @@ services:
       - BROWSER_DEBUGGING_HOST=0.0.0.0
       - USE_OWN_BROWSER=false
       - KEEP_BROWSER_OPEN=true
-      # Startup browser: when true, Chromium starts at container boot and WebUI connects via BROWSER_CDP. Set LAUNCH_BROWSER_AT_STARTUP=false and BROWSER_CDP= to launch browser only on first run_agent.
+      # Startup browser: when true, Chromium starts at container boot (visible in VNC); CDP on 9222 available shortly after. Set STARTUP_BROWSER_HEADLESS=1 for headless-only.
       - LAUNCH_BROWSER_AT_STARTUP=${LAUNCH_BROWSER_AT_STARTUP:-true}
       - BROWSER_CDP=${BROWSER_CDP:-http://127.0.0.1:9222}
       - PLAYWRIGHT_LAUNCH_ARGS=--no-sandbox --disable-blink-features=AutomationControlled --disable-dev-shm-usage --disable-infobars --disable-features=TranslateUI --remote-debugging-port=9223 --disable-extensions-except=/ms-playwright/stealth-extension --load-extension=/ms-playwright/stealth-extension
