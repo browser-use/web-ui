@@ -19,6 +19,8 @@ We would like to officially thank [WarmShao](https://github.com/warmshao) for hi
 
 **Persistent Browser Sessions:** You can choose to keep the browser window open between AI tasks, allowing you to see the complete history and state of AI interactions.
 
+**Need an always-on browser agent?** [Browser Use Box](https://github.com/browser-use/bux) runs a 24/7 Telegram-controlled agent on your own Linux box with a persistent Browser Use Cloud browser. [Watch the demo](https://www.tiktok.com/@browser_use/video/7639824093721758989).
+
 <video src="https://github.com/user-attachments/assets/56bc7080-f2e3-4367-af22-6bf2245ff6cb" controls="controls">Your browser does not support playing this video!</video>
 
 ## Installation Guide
