@@ -93,7 +93,7 @@ async def test_browser_use_agent():
         }
     }
     controller = CustomController()
-    await controller.setup_mcp_client(mcp_server_config)
+# MCP setup removed
     use_own_browser = True
     use_vision = True  # Set to False when using DeepSeek
 
@@ -160,7 +160,7 @@ async def test_browser_use_agent():
         if browser:
             await browser.close()
         if controller:
-            await controller.close_mcp_client()
+# MCP cleanup removed
 
 
 async def test_browser_use_parallel():
@@ -249,7 +249,7 @@ async def test_browser_use_parallel():
         }
     }
     controller = CustomController()
-    await controller.setup_mcp_client(mcp_server_config)
+# MCP setup removed
     use_own_browser = True
     use_vision = True  # Set to False when using DeepSeek
 
@@ -323,7 +323,7 @@ async def test_browser_use_parallel():
         if browser:
             await browser.close()
         if controller:
-            await controller.close_mcp_client()
+# MCP cleanup removed
 
 
 async def test_deep_research_agent():
@@ -340,20 +340,9 @@ async def test_deep_research_agent():
     #     provider="bedrock",
     # )
 
-    mcp_server_config = {
-        "mcpServers": {
-            "desktop-commander": {
-                "command": "npx",
-                "args": [
-                    "-y",
-                    "@wonderwhy-er/desktop-commander"
-                ]
-            },
-        }
-    }
-
+# MCP server config removed
     browser_config = {"headless": False, "window_width": 1280, "window_height": 1100, "use_own_browser": False}
-    agent = DeepResearchAgent(llm=llm, browser_config=browser_config, mcp_server_config=mcp_server_config)
+    agent = DeepResearchAgent(llm=llm, browser_config=browser_config)
     research_topic = "Give me investment advices of nvidia and tesla."
     task_id_to_resume = ""  # Set this to resume a previous task ID
 

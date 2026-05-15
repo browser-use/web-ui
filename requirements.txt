@@ -1,10 +1,5 @@
-browser-use==0.1.48
+browser-use==0.10.1
 pyperclip==1.9.0
-gradio==5.27.0
-json-repair
-langchain-mistralai==0.2.4
+gradio==5.49.1
+json-repair==0.49.0
 MainContentExtractor==0.0.4
-langchain-ibm==0.3.10
-langchain_mcp_adapters==0.0.9
-langgraph==0.3.34
-langchain-community

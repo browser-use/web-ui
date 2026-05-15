@@ -3,8 +3,8 @@ import pdb
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_ollama import ChatOllama
+from browser_use.llm import UserMessage, SystemMessage, BaseChatModel
+from src.utils import llm_provider
 
 load_dotenv()
 
@@ -55,21 +55,7 @@ def get_env_value(key, provider):
 def test_llm(config, query, image_path=None, system_message=None):
     from src.utils import utils, llm_provider
 
-    # Special handling for Ollama-based models
-    if config.provider == "ollama":
-        if "deepseek-r1" in config.model_name:
-            from src.utils.llm_provider import DeepSeekR1ChatOllama
-            llm = DeepSeekR1ChatOllama(model=config.model_name)
-        else:
-            llm = ChatOllama(model=config.model_name)
-
-        ai_msg = llm.invoke(query)
-        print(ai_msg.content)
-        if "deepseek-r1" in config.model_name:
-            pdb.set_trace()
-        return
-
-    # For other providers, use the standard configuration
+    # Use the unified LLM provider for all models
     llm = llm_provider.get_llm_model(
         provider=config.provider,
         model_name=config.model_name,
@@ -78,17 +64,24 @@ def test_llm(config, query, image_path=None, system_message=None):
         api_key=config.api_key or get_env_value("api_key", config.provider)
     )
 
-    # Prepare messages for non-Ollama models
+    # Prepare messages using browser-use message types
     messages = []
     if system_message:
-        messages.append(SystemMessage(content=create_message_content(system_message)))
-    messages.append(HumanMessage(content=create_message_content(query, image_path)))
+        messages.append(SystemMessage(content=system_message))
+    
+    # Use create_message_content to handle both text and image content
+    user_content = create_message_content(query, image_path) if image_path else query
+    messages.append(UserMessage(content=user_content))
+    
+    # Call the LLM
     ai_msg = llm.invoke(messages)
-
+    
     # Handle different response types
     if hasattr(ai_msg, "reasoning_content"):
         print(ai_msg.reasoning_content)
-    print(ai_msg.content)
+    
+    content = ai_msg.content if hasattr(ai_msg, 'content') else str(ai_msg)
+    print(content)
 
 def test_openai_model():
     config = LLMConfig(provider="openai", model_name="gpt-4o")

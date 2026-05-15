@@ -26,7 +26,7 @@ def update_model_dropdown(llm_provider):
 
 async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
     """
-    Update the MCP server.
+    Update the MCP server configuration using browser-use MCP implementation.
     """
     if hasattr(webui_manager, "bu_controller") and webui_manager.bu_controller:
         logger.warning("⚠️ Close controller because mcp file has changed!")
@@ -35,7 +35,7 @@ async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
 
     if not mcp_file or not os.path.exists(mcp_file) or not mcp_file.endswith('.json'):
         logger.warning(f"{mcp_file} is not a valid MCP file.")
-        return None, gr.update(visible=False)
+        return '', gr.update(visible=False)
 
     with open(mcp_file, 'r') as f:
         mcp_server = json.load(f)
@@ -64,14 +64,14 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
             llm_provider = gr.Dropdown(
                 choices=[provider for provider, model in config.model_names.items()],
                 label="LLM Provider",
-                value=os.getenv("DEFAULT_LLM", "openai"),
+                value=os.getenv("DEFAULT_LLM", "anthropic"),
                 info="Select LLM provider for LLM",
                 interactive=True
             )
             llm_model_name = gr.Dropdown(
                 label="LLM Model Name",
-                choices=config.model_names[os.getenv("DEFAULT_LLM", "openai")],
-                value=config.model_names[os.getenv("DEFAULT_LLM", "openai")][0],
+                choices=config.model_names[os.getenv("DEFAULT_LLM", "anthropic")],
+                value="claude-sonnet-4-5",
                 interactive=True,
                 allow_custom_value=True,
                 info="Select a model in the dropdown options or directly type a custom model name"
@@ -258,12 +258,12 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
     )
 
     async def update_wrapper(mcp_file):
-        """Wrapper for handle_pause_resume."""
+        """Wrapper for MCP server update."""
         update_dict = await update_mcp_server(mcp_file, webui_manager)
-        yield update_dict
+        return update_dict
 
     mcp_json_file.change(
-        update_wrapper,
+        fn=update_wrapper,
         inputs=[mcp_json_file],
         outputs=[mcp_server_config, mcp_server_config]
     )

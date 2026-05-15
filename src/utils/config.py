@@ -13,7 +13,7 @@ PROVIDER_DISPLAY_NAMES = {
 
 # Predefined model names for common providers
 model_names = {
-    "anthropic": ["claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20240620", "claude-3-opus-20240229"],
+    "anthropic": ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"],
     "openai": ["gpt-4o", "gpt-4", "gpt-3.5-turbo", "o3-mini"],
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "google": ["gemini-2.0-flash", "gemini-2.0-flash-thinking-exp", "gemini-1.5-flash-latest",

@@ -6,18 +6,18 @@ import os
 
 # from lmnr.sdk.decorators import observe
 from browser_use.agent.gif import create_history_gif
-from browser_use.agent.service import Agent, AgentHookFunc
+from browser_use import Agent
+from browser_use.agent.service import AgentHookFunc
 from browser_use.agent.views import (
     ActionResult,
     AgentHistory,
     AgentHistoryList,
     AgentStepInfo,
-    ToolCallingMethod,
 )
 from browser_use.browser.views import BrowserStateHistory
 from browser_use.utils import time_execution_async
 from dotenv import load_dotenv
-from browser_use.agent.message_manager.utils import is_model_without_tool_support
+# is_model_without_tool_support removed in browser_use 0.6.0
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -28,16 +28,13 @@ SKIP_LLM_API_KEY_VERIFICATION = (
 
 
 class BrowserUseAgent(Agent):
-    def _set_tool_calling_method(self) -> ToolCallingMethod | None:
+    def _set_tool_calling_method(self) -> str | None:
         tool_calling_method = self.settings.tool_calling_method
         if tool_calling_method == 'auto':
-            if is_model_without_tool_support(self.model_name):
-                return 'raw'
-            elif self.chat_model_library == 'ChatGoogleGenerativeAI':
+            # Simplified logic for browser_use 0.6.0
+            if self.chat_model_library == 'ChatGoogleGenerativeAI':
                 return None
-            elif self.chat_model_library == 'ChatOpenAI':
-                return 'function_calling'
-            elif self.chat_model_library == 'AzureChatOpenAI':
+            elif self.chat_model_library in ['ChatOpenAI', 'AzureChatOpenAI']:
                 return 'function_calling'
             else:
                 return None
@@ -141,23 +138,6 @@ class BrowserUseAgent(Agent):
             # Unregister signal handlers before cleanup
             signal_handler.unregister()
 
-            if self.settings.save_playwright_script_path:
-                logger.info(
-                    f'Agent run finished. Attempting to save Playwright script to: {self.settings.save_playwright_script_path}'
-                )
-                try:
-                    # Extract sensitive data keys if sensitive_data is provided
-                    keys = list(self.sensitive_data.keys()) if self.sensitive_data else None
-                    # Pass browser and context config to the saving method
-                    self.state.history.save_as_playwright_script(
-                        self.settings.save_playwright_script_path,
-                        sensitive_data_keys=keys,
-                        browser_config=self.browser.config,
-                        context_config=self.browser_context.config,
-                    )
-                except Exception as script_gen_err:
-                    # Log any error during script generation/saving
-                    logger.error(f'Failed to save Playwright script: {script_gen_err}', exc_info=True)
 
             await self.close()
 

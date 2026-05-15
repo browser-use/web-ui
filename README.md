@@ -57,19 +57,10 @@ Activate the virtual environment:
 source .venv/bin/activate
 ```
 
-#### Step 3: Install Dependencies
-Install Python packages:
+#### Step 3: Install Python Packages
+Install the required Python packages using uv:
 ```bash
 uv pip install -r requirements.txt
-```
-
-Install Browsers in playwright. 
-```bash
-playwright install --with-deps
-```
-Or you can install specific browsers by running:
-```bash
-playwright install chromium --with-deps
 ```
 
 #### Step 4: Configure Environment

@@ -15,6 +15,24 @@ from src.utils import llm_provider
 logger = logging.getLogger(__name__)
 
 
+async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
+    """
+    Update the MCP server configuration for deep research agent.
+    """
+    if hasattr(webui_manager, "dr_agent") and webui_manager.dr_agent:
+        logger.warning("⚠️ Close agent because mcp file has changed!")
+        # For deep research agent, we'll handle MCP setup when creating the agent
+
+    if not mcp_file or not os.path.exists(mcp_file) or not mcp_file.endswith('.json'):
+        logger.warning(f"{mcp_file} is not a valid MCP file.")
+        return '', gr.update(visible=False)
+
+    with open(mcp_file, 'r') as f:
+        mcp_server = json.load(f)
+
+    return json.dumps(mcp_server, indent=2), gr.update(visible=True)
+
+
 async def _initialize_llm(provider: Optional[str], model_name: Optional[str], temperature: float,
                           base_url: Optional[str], api_key: Optional[str], num_ctx: Optional[int] = None):
     """Initializes the LLM based on settings. Returns None if provider/model is missing."""
@@ -68,7 +86,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
     stop_button_comp = webui_manager.get_component_by_id("deep_research_agent.stop_button")
     markdown_display_comp = webui_manager.get_component_by_id("deep_research_agent.markdown_display")
     markdown_download_comp = webui_manager.get_component_by_id("deep_research_agent.markdown_download")
-    mcp_server_config_comp = webui_manager.get_component_by_id("deep_research_agent.mcp_server_config")
+# MCP functionality removed
 
     # --- 1. Get Task and Settings ---
     task_topic = components.get(research_task_comp, "").strip()
@@ -81,8 +99,17 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         logger.warning(f"Unsafe base_save_dir detected: {base_save_dir}. Using default directory.")
         normalized_base_save_dir = os.path.abspath(safe_root_dir)
     base_save_dir = normalized_base_save_dir
+    
+    # Get MCP configuration
+    mcp_server_config_comp = webui_manager.get_component_by_id("deep_research_agent.mcp_server_config")
     mcp_server_config_str = components.get(mcp_server_config_comp)
-    mcp_config = json.loads(mcp_server_config_str) if mcp_server_config_str else None
+    mcp_config = None
+    if mcp_server_config_str:
+        try:
+            mcp_config = json.loads(mcp_server_config_str)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid MCP config JSON: {e}. Continuing without MCP.")
+            mcp_config = None
 
     if not task_topic:
         gr.Warning("Please enter a research task.")
@@ -151,16 +178,15 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
             webui_manager.dr_agent = DeepResearchAgent(
                 llm=llm,
                 browser_config=browser_config_dict,
-                mcp_server_config=mcp_config
+                # Note: Deep research agent doesn't directly support MCP in the simplified version
+                # but browser agents within it can use MCP through the controller
             )
             logger.info("DeepResearchAgent initialized.")
 
         # --- 5. Start Agent Run ---
-        agent_run_coro = webui_manager.dr_agent.run(
-            topic=task_topic,
-            task_id=task_id_to_resume,
-            save_dir=base_save_dir,
-            max_parallel_browsers=max_parallel_agents
+        agent_run_coro = webui_manager.dr_agent.research(
+            query=task_topic,
+            output_dir=base_save_dir
         )
         agent_task = asyncio.create_task(agent_run_coro)
         webui_manager.dr_current_task = agent_task
@@ -230,20 +256,34 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
 
         # --- 7. Task Finalization ---
         logger.info("Agent task processing finished. Awaiting final result...")
-        final_result_dict = await agent_task  # Get result or raise exception
-        logger.info(f"Agent run completed. Result keys: {final_result_dict.keys() if final_result_dict else 'None'}")
+        final_result_path = await agent_task  # Get result path or raise exception
+        logger.info(f"Agent run completed. Result path: {final_result_path}")
 
-        # Try to get task ID from result if not known before
-        if not running_task_id and final_result_dict and 'task_id' in final_result_dict:
-            running_task_id = final_result_dict['task_id']
+        # Try to get task ID from agent's current state if not known before
+        if not running_task_id and webui_manager.dr_agent.current_task_id:
+            running_task_id = webui_manager.dr_agent.current_task_id
             webui_manager.dr_task_id = running_task_id
             task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
             report_file_path = os.path.join(task_specific_dir, "report.md")
-            logger.info(f"Task ID confirmed from result: {running_task_id}")
+            logger.info(f"Task ID confirmed from agent state: {running_task_id}")
 
         final_ui_update = {}
-        if report_file_path and os.path.exists(report_file_path):
-            logger.info(f"Loading final report from: {report_file_path}")
+        
+        # Use the returned report path directly
+        if final_result_path and os.path.exists(final_result_path):
+            logger.info(f"Loading final report from returned path: {final_result_path}")
+            report_content = _read_file_safe(final_result_path)
+            if report_content:
+                final_ui_update[markdown_display_comp] = gr.update(value=report_content)
+                final_ui_update[markdown_download_comp] = gr.File(value=final_result_path,
+                                                                  label=f"Report ({running_task_id or 'research'}.md)",
+                                                                  interactive=True)
+            else:
+                final_ui_update[markdown_display_comp] = gr.update(
+                    value="# Research Complete\n\n*Error reading final report file.*")
+        elif report_file_path and os.path.exists(report_file_path):
+            # Fallback to expected report path if direct path doesn't work
+            logger.info(f"Loading final report from expected path: {report_file_path}")
             report_content = _read_file_safe(report_file_path)
             if report_content:
                 final_ui_update[markdown_display_comp] = gr.update(value=report_content)
@@ -253,15 +293,8 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
             else:
                 final_ui_update[markdown_display_comp] = gr.update(
                     value="# Research Complete\n\n*Error reading final report file.*")
-        elif final_result_dict and 'report' in final_result_dict:
-            logger.info("Using report content directly from agent result.")
-            # If agent directly returns report content
-            final_ui_update[markdown_display_comp] = gr.update(value=final_result_dict['report'])
-            # Cannot offer download if only content is available
-            final_ui_update[markdown_download_comp] = gr.update(value=None, label="Download Research Report",
-                                                                interactive=False)
         else:
-            logger.warning("Final report file not found and not in result dict.")
+            logger.warning("Final report file not found at returned path or expected location.")
             final_ui_update[markdown_display_comp] = gr.update(value="# Research Complete\n\n*Final report not found.*")
 
         yield final_ui_update
@@ -355,22 +388,7 @@ async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any
     return final_update
 
 
-async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
-    """
-    Update the MCP server.
-    """
-    if hasattr(webui_manager, "dr_agent") and webui_manager.dr_agent:
-        logger.warning("⚠️ Close controller because mcp file has changed!")
-        await webui_manager.dr_agent.close_mcp_client()
-
-    if not mcp_file or not os.path.exists(mcp_file) or not mcp_file.endswith('.json'):
-        logger.warning(f"{mcp_file} is not a valid MCP file.")
-        return None, gr.update(visible=False)
-
-    with open(mcp_file, 'r') as f:
-        mcp_server = json.load(f)
-
-    return json.dumps(mcp_server, indent=2), gr.update(visible=True)
+# MCP functionality removed
 
 
 def create_deep_research_agent_tab(webui_manager: WebuiManager):
@@ -381,9 +399,8 @@ def create_deep_research_agent_tab(webui_manager: WebuiManager):
     tab_components = {}
 
     with gr.Group():
-        with gr.Row():
-            mcp_json_file = gr.File(label="MCP server json", interactive=True, file_types=[".json"])
-            mcp_server_config = gr.Textbox(label="MCP server", lines=6, interactive=True, visible=False)
+        mcp_json_file = gr.File(label="MCP server json", interactive=True, file_types=[".json"])
+        mcp_server_config = gr.Textbox(label="MCP server", lines=6, interactive=True, visible=False)
 
     with gr.Group():
         research_task = gr.Textbox(label="Research Task", lines=5,
@@ -421,12 +438,12 @@ def create_deep_research_agent_tab(webui_manager: WebuiManager):
     webui_manager.init_deep_research_agent()
 
     async def update_wrapper(mcp_file):
-        """Wrapper for handle_pause_resume."""
+        """Wrapper for MCP server update."""
         update_dict = await update_mcp_server(mcp_file, webui_manager)
-        yield update_dict
+        return update_dict
 
     mcp_json_file.change(
-        update_wrapper,
+        fn=update_wrapper,
         inputs=[mcp_json_file],
         outputs=[mcp_server_config, mcp_server_config]
     )

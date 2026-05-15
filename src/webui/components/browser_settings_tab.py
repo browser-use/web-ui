@@ -1,5 +1,14 @@
 import os
-from distutils.util import strtobool
+# distutils removed in Python 3.13
+def strtobool(val):
+    """Convert a string representation of truth to true or false."""
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return 1
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return 0
+    else:
+        raise ValueError(f"invalid truth value {val!r}")
 import gradio as gr
 import logging
 from gradio.components import Component
