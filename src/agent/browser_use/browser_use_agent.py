@@ -140,25 +140,6 @@ class BrowserUseAgent(Agent):
         finally:
             # Unregister signal handlers before cleanup
             signal_handler.unregister()
-
-            if self.settings.save_playwright_script_path:
-                logger.info(
-                    f'Agent run finished. Attempting to save Playwright script to: {self.settings.save_playwright_script_path}'
-                )
-                try:
-                    # Extract sensitive data keys if sensitive_data is provided
-                    keys = list(self.sensitive_data.keys()) if self.sensitive_data else None
-                    # Pass browser and context config to the saving method
-                    self.state.history.save_as_playwright_script(
-                        self.settings.save_playwright_script_path,
-                        sensitive_data_keys=keys,
-                        browser_config=self.browser.config,
-                        context_config=self.browser_context.config,
-                    )
-                except Exception as script_gen_err:
-                    # Log any error during script generation/saving
-                    logger.error(f'Failed to save Playwright script: {script_gen_err}', exc_info=True)
-
             await self.close()
 
             if self.settings.generate_gif:

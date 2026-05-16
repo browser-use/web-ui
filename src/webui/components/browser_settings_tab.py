@@ -17,15 +17,10 @@ async def close_browser(webui_manager: WebuiManager):
         webui_manager.bu_current_task.cancel()
         webui_manager.bu_current_task = None
 
-    if webui_manager.bu_browser_context:
-        logger.info("⚠️ Closing browser context when changing browser config.")
-        await webui_manager.bu_browser_context.close()
-        webui_manager.bu_browser_context = None
-
-    if webui_manager.bu_browser:
-        logger.info("⚠️ Closing browser when changing browser config.")
-        await webui_manager.bu_browser.close()
-        webui_manager.bu_browser = None
+    if webui_manager.bu_browser_session:
+        logger.info("⚠️ Closing browser session when changing browser config.")
+        await webui_manager.bu_browser_session.kill()
+        webui_manager.bu_browser_session = None
 
 def create_browser_settings_tab(webui_manager: WebuiManager):
     """

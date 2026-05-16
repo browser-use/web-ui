@@ -7,7 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict
 
-from browser_use.browser.browser import BrowserConfig
+from browser_use.browser import BrowserProfile, BrowserSession
+from browser_use.browser.profile import ViewportSize
 from langchain_community.tools.file_management import (
     ListDirectoryTool,
     ReadFileTool,
@@ -29,10 +30,7 @@ from langchain_core.tools import StructuredTool, Tool
 from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 
-from browser_use.browser.context import BrowserContextConfig
-
 from src.agent.browser_use.browser_use_agent import BrowserUseAgent
-from src.browser.custom_browser import CustomBrowser
 from src.controller.custom_controller import CustomController
 from src.utils.mcp_client import setup_mcp_client_and_tools
 
@@ -77,42 +75,30 @@ async def run_single_browser_task(
     cdp_url = browser_config.get("cdp_url", None)
     disable_security = browser_config.get("disable_security", False)
 
-    bu_browser = None
-    bu_browser_context = None
+    bu_browser_session = None
     try:
+        browser_user_data = None
         logger.info(f"Starting browser task for query: {task_query}")
-        extra_args = []
         if use_own_browser:
             browser_binary_path = os.getenv("BROWSER_PATH", None) or browser_binary_path
             if browser_binary_path == "":
                 browser_binary_path = None
             browser_user_data = browser_user_data_dir or os.getenv("BROWSER_USER_DATA", None)
-            if browser_user_data:
-                extra_args += [f"--user-data-dir={browser_user_data}"]
         else:
             browser_binary_path = None
-
-        bu_browser = CustomBrowser(
-            config=BrowserConfig(
-                headless=headless,
-                browser_binary_path=browser_binary_path,
-                extra_browser_args=extra_args,
-                wss_url=wss_url,
-                cdp_url=cdp_url,
-                new_context_config=BrowserContextConfig(
-                    window_width=window_w,
-                    window_height=window_h,
-                )
-            )
+        browser_profile = BrowserProfile(
+            headless=headless,
+            executable_path=browser_binary_path,
+            user_data_dir=browser_user_data,
+            window_size=ViewportSize(width=window_w, height=window_h),
+            traces_dir=None,
+            record_video_dir=None,
+            downloads_path="./tmp/downloads"
         )
-
-        context_config = BrowserContextConfig(
-            save_downloads_path="./tmp/downloads",
-            window_height=window_h,
-            window_width=window_w,
-            force_new_context=True,
-        )
-        bu_browser_context = await bu_browser.new_context(config=context_config)
+        bu_browser_session = BrowserSession(
+            browser_profile=browser_profile,
+            wss_url=wss_url,
+            cdp_url=cdp_url)
 
         # Simple controller example, replace with your actual implementation if needed
         bu_controller = CustomController()
@@ -133,8 +119,7 @@ async def run_single_browser_task(
         bu_agent_instance = BrowserUseAgent(
             task=bu_task_prompt,
             llm=llm,  # Use the passed LLM
-            browser=bu_browser,
-            browser_context=bu_browser_context,
+            browser_session=bu_browser_session,
             controller=bu_controller,
             use_vision=use_vision,
             source="webui",
@@ -174,20 +159,13 @@ async def run_single_browser_task(
         )
         return {"query": task_query, "error": str(e), "status": "failed"}
     finally:
-        if bu_browser_context:
+        if bu_browser_session:
             try:
-                await bu_browser_context.close()
-                bu_browser_context = None
-                logger.info("Closed browser context.")
+                await bu_browser_session.kill()
+                bu_browser_session = None
+                logger.info("Closed browser session.")
             except Exception as e:
-                logger.error(f"Error closing browser context: {e}")
-        if bu_browser:
-            try:
-                await bu_browser.close()
-                bu_browser = None
-                logger.info("Closed browser.")
-            except Exception as e:
-                logger.error(f"Error closing browser: {e}")
+                logger.error(f"Error closing browser session: {e}")
 
         if task_key in _BROWSER_AGENT_INSTANCES:
             del _BROWSER_AGENT_INSTANCES[task_key]
