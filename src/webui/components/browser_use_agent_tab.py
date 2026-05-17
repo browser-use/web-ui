@@ -964,18 +964,12 @@ async def handle_clear(webui_manager: WebuiManager):
             interactive=True
         ),
     }
-
-
-# --- Tab Creation Function ---
-
-
-def create_browser_use_agent_tab(webui_manager: WebuiManager):
+def create_browser_use_agent_tab(webui_manager: WebuiManager, speech_js: str):
     """
     Create the run agent tab, defining UI, state, and handlers.
     """
     webui_manager.init_browser_use_agent()
-
-    # --- Define UI Components ---
+    # --- 2. Define UI Components ---
     tab_components = {}
     with gr.Column():
         chatbot = gr.Chatbot(
@@ -986,13 +980,24 @@ def create_browser_use_agent_tab(webui_manager: WebuiManager):
             height=600,
             show_copy_button=True,
         )
-        user_input = gr.Textbox(
-            label="Your Task or Response",
-            placeholder="Enter your task here or provide assistance when asked.",
-            lines=3,
-            interactive=True,
-            elem_id="user_input",
-        )
+        
+        # --- NEW: Place button and textbox together ---
+        with gr.Row():
+            user_input = gr.Textbox(
+                label="Your Task or Response",
+                placeholder="Enter your task, or Speak.",
+                lines=3,
+                interactive=True,
+                elem_id="user_input", # Crucial ID for the JS
+                scale=5 # Make textbox bigger
+            )
+            # --- NEW: This is the button ---
+            speech_to_text_button = gr.Button(
+                "🎙️", 
+                elem_id="speech_btn", # Crucial ID for the JS
+                scale=1
+            )
+
         with gr.Row():
             stop_button = gr.Button(
                 "⏹️ Stop", interactive=False, variant="stop", scale=2
@@ -1021,11 +1026,12 @@ def create_browser_use_agent_tab(webui_manager: WebuiManager):
                 type="filepath",
             )
 
-    # --- Store Components in Manager ---
+    # --- 3. NEW: Store Components in Manager (add the new button) ---
     tab_components.update(
         dict(
             chatbot=chatbot,
             user_input=user_input,
+            speech_to_text_button=speech_to_text_button, # <-- ADDED THIS
             clear_button=clear_button,
             run_button=run_button,
             stop_button=stop_button,
@@ -1044,8 +1050,17 @@ def create_browser_use_agent_tab(webui_manager: WebuiManager):
     )  # Get all components known to manager
     run_tab_outputs = list(tab_components.values())
 
+    # --- 4. NEW: Connect the Speech Button to the JavaScript ---
+    speech_to_text_button.click(
+        fn=None,  # We don't run any Python code
+        inputs=None,
+        outputs=None,
+        js=speech_js  # We run this JavaScript code instead
+    )
+
+    # --- Your existing wrapper functions (UNCHANGED) ---
     async def submit_wrapper(
-            components_dict: Dict[Component, Any],
+        components_dict: Dict[Component, Any],
     ) -> AsyncGenerator[Dict[Component, Any], None]:
         """Wrapper for handle_submit that yields its results."""
         async for update in handle_submit(webui_manager, components_dict):
