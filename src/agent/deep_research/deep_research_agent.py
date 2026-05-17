@@ -330,9 +330,110 @@ class DeepResearchState(TypedDict):
     stop_requested: bool
     error_message: Optional[str]
     messages: List[BaseMessage]
+    awaiting_final_confirmation: bool = False
+    user_confirmed_synthesis: bool = False
+    awaiting_error_feedback: bool = False
+    error_details: Optional[str] = None
+    user_feedback_on_error: Optional[str] = None
+    current_error_node_origin: Optional[str] = None
+    _routing_target: Optional[str] = None # Internal temporary field for routing
 
 
 # --- Langgraph Nodes ---
+
+
+async def request_final_confirmation_node(state: DeepResearchState) -> Dict[str, Any]:
+    """Node to request final confirmation from the user before synthesis."""
+    logger.info("--- Entering Request Final Confirmation Node ---")
+    # The UI would observe awaiting_final_confirmation and prompt the user.
+    # The actual message to the user is handled by the UI.
+    # This node just updates the state to signify it's waiting.
+    return {
+        "awaiting_final_confirmation": True,
+        "messages": state["messages"] + [SystemMessage(content="Requesting final confirmation before proceeding to synthesis.")]
+    }
+
+
+async def request_error_feedback_node(state: DeepResearchState) -> Dict[str, Any]:
+    """Node to request error feedback from the user."""
+    logger.info(f"--- Entering Request Error Feedback Node ---")
+    error_details = state.get("error_details", "Unknown error")
+    origin_node = state.get("current_error_node_origin", "Unknown origin")
+    logger.info(f"Requesting user feedback for error from '{origin_node}': {error_details}")
+    return {
+        "awaiting_error_feedback": True,
+        "messages": state["messages"] + [SystemMessage(content=f"Agent paused due to error in {origin_node}: {error_details}. Awaiting user feedback (e.g., 'retry', 'skip', 'abort').")]
+    }
+
+
+async def process_error_feedback_node(state: DeepResearchState) -> Dict[str, Any]:
+    """Processes user feedback on an error and determines next step."""
+    logger.info(f"--- Entering Process Error Feedback Node ---")
+    feedback = state.get("user_feedback_on_error")
+    origin_node = state.get("current_error_node_origin") # Should be set
+
+    updated_plan = state["research_plan"]
+    cat_idx = state["current_category_index"]
+    task_idx = state["current_task_index_in_category"]
+
+    new_messages = state["messages"] + [SystemMessage(content=f"User provided feedback on error: '{feedback}'.")]
+
+    next_node_target: Optional[str] = None
+    updates_for_state = {
+        "user_feedback_on_error": None, # Clear feedback
+        "awaiting_error_feedback": False,
+        # Keep error_details and current_error_node_origin for now, clear if successfully retrying/skipping
+        "_routing_target": None, # Clear any previous routing target
+    }
+
+    if feedback == "retry":
+        logger.info(f"Retrying node '{origin_node}' based on user feedback.")
+        new_messages.append(SystemMessage(content=f"Retrying task in {origin_node} based on user feedback."))
+        next_node_target = origin_node
+        # Clear error details for the retry attempt
+        updates_for_state["error_details"] = None
+        updates_for_state["current_error_node_origin"] = None
+    elif feedback == "skip":
+        logger.info(f"Skipping current task in '{origin_node}' based on user feedback.")
+        new_messages.append(SystemMessage(content=f"Skipping current task based on user feedback."))
+        if updated_plan and cat_idx < len(updated_plan) and task_idx < len(updated_plan[cat_idx]["tasks"]):
+            updated_plan[cat_idx]["tasks"][task_idx]["status"] = "skipped_by_user"
+            updated_plan[cat_idx]["tasks"][task_idx]["result_summary"] = "Task skipped due to error, per user feedback."
+            _save_plan_to_md(updated_plan, str(state["output_dir"]))
+
+            # Advance task/category index
+            task_idx += 1
+            if task_idx >= len(updated_plan[cat_idx]["tasks"]):
+                cat_idx += 1
+                task_idx = 0
+            updates_for_state["current_category_index"] = cat_idx
+            updates_for_state["current_task_index_in_category"] = task_idx
+            updates_for_state["research_plan"] = updated_plan
+        else:
+            logger.warning("Could not mark task as skipped: Plan/indices out of bounds.")
+
+        next_node_target = origin_node # Let it go through should_continue with updated indices
+        # Clear error details as we are moving on
+        updates_for_state["error_details"] = None
+        updates_for_state["current_error_node_origin"] = None
+    elif feedback == "abort":
+        logger.info(f"Aborting research based on user feedback on error.")
+        new_messages.append(SystemMessage(content=f"Aborting research based on user feedback."))
+        updates_for_state["stop_requested"] = True
+        # Clear all error related fields
+        updates_for_state["error_details"] = None
+        updates_for_state["current_error_node_origin"] = None
+        next_node_target = "end_run" # Explicitly route to end
+    else:
+        logger.warning(f"Unknown feedback type: '{feedback}'. Defaulting to re-request feedback.")
+        new_messages.append(SystemMessage(content=f"Unknown feedback '{feedback}'. Please provide 'retry', 'skip', or 'abort'."))
+        updates_for_state["awaiting_error_feedback"] = True # Re-request feedback
+        updates_for_state["user_feedback_on_error"] = None # Clear invalid feedback
+        next_node_target = "request_error_feedback" # Go back to request feedback node
+
+    updates_for_state["messages"] = new_messages
+    updates_for_state["_routing_target"] = next_node_target
+    return updates_for_state
 
 
 def _load_previous_state(task_id: str, output_dir: str) -> Dict[str, Any]:
@@ -799,12 +900,23 @@ async def research_execution_node(state: DeepResearchState) -> Dict[str, Any]:
         if next_task_idx >= len(current_category["tasks"]):
             next_cat_idx += 1
             next_task_idx = 0
+        logger.error(f"Unhandled error during research execution for task '{current_task['task_description']}': {e}",
+                     exc_info=True)
+        # Preserve existing messages up to the point of error
+        error_messages = state.get("messages", []) + current_task_message_history + [
+            SystemMessage(content=f"Encountered error during task execution: {e}")
+        ]
+        # Don't mark task as failed in plan yet, user might retry
+        # _save_plan_to_md(plan, output_dir) # Plan not changed here
         return {
+            "error_details": str(e),
+            "current_error_node_origin": "execute_research", # This node's name
+            "awaiting_error_feedback": True, # Signal to pause and request feedback
+            "messages": error_messages,
+            # Keep current plan and indices, user might retry current task
             "research_plan": plan,
-            "current_category_index": next_cat_idx,
-            "current_task_index_in_category": next_task_idx,
-            "error_message": f"Core Execution Error on task '{current_task['task_description']}': {e}",
-            "messages": state["messages"] + current_task_message_history  # Preserve messages up to error
+            "current_category_index": cat_idx,
+            "current_task_index_in_category": task_idx,
         }
 
 
@@ -940,9 +1052,15 @@ def should_continue(state: DeepResearchState) -> str:
     if state.get("stop_requested"):
         logger.info("Stop requested, routing to END.")
         return "end_run"
-    if state.get("error_message") and "Core Execution Error" in state["error_message"]:  # Critical error in node
-        logger.warning(f"Critical error detected: {state['error_message']}. Routing to END.")
-        return "end_run"
+    if state.get("error_message") and "Core Execution Error" in state["error_message"]:
+        logger.warning(f"Core execution error detected: {state['error_message']}. Routing to request_error_feedback.")
+        # This specific error_message is from non-feedback path, but could be consolidated
+        # For now, let's assume Core Execution Error means we want user feedback
+        return "request_error_feedback" # Route to get feedback for this specific error type
+    if state.get("awaiting_error_feedback"): # If a node explicitly set this, go ask for feedback
+        logger.info("State indicates awaiting_error_feedback. Routing to request_error_feedback_node.")
+        return "request_error_feedback"
+
 
     plan = state.get("research_plan")
     cat_idx = state.get("current_category_index", 0)
@@ -972,8 +1090,64 @@ def should_continue(state: DeepResearchState) -> str:
                 return "execute_research"
 
     # If we've gone through all categories and tasks (cat_idx >= len(plan))
-    logger.info("All plan categories and tasks processed or current indices are out of bounds. Routing to Synthesis.")
-    return "synthesize_report"
+    logger.info("All plan categories and tasks processed or current indices are out of bounds.")
+    if state.get("user_confirmed_synthesis"):
+        logger.info("User has confirmed. Routing to Synthesis.")
+        return "synthesize_report"
+    else:
+        logger.info("User has not confirmed. Routing to Request Final Confirmation.")
+        return "request_final_confirmation"
+
+
+def did_user_confirm_synthesis(state: DeepResearchState) -> str:
+    """Checks if the user has confirmed synthesis."""
+    logger.info("--- Evaluating Condition: Did User Confirm Synthesis? ---")
+    if state.get("user_confirmed_synthesis"):
+        logger.info("User confirmed synthesis. Routing to 'synthesize_report'.")
+        return "synthesize_report"
+    else:
+        logger.info("User has not confirmed synthesis. Routing to 'wait_for_confirmation' (back to request_final_confirmation node).")
+        return "wait_for_confirmation"
+
+def did_user_provide_error_feedback(state: DeepResearchState) -> str:
+    """Checks if the user has provided feedback on an error."""
+    logger.info("--- Evaluating Condition: Did User Provide Error Feedback? ---")
+    if state.get("user_feedback_on_error"):
+        logger.info("User provided error feedback. Routing to 'process_error_feedback'.")
+        return "process_error_feedback"
+    else:
+        logger.info("User has not provided error feedback. Routing to 'wait_for_error_feedback' (back to request_error_feedback node).")
+        return "wait_for_error_feedback" # Loops back to request_error_feedback
+
+def route_after_error_processing(state: DeepResearchState) -> str:
+    """Determines the next node after error feedback has been processed."""
+    logger.info("--- Evaluating Condition: Route After Error Processing ---")
+    if state.get("stop_requested"):
+        logger.info("Stop requested after error feedback. Routing to 'end_run'.")
+        return "end_run"
+
+    routing_target = state.get("_routing_target")
+    # Important: Clear the routing target from state after reading it to prevent stale routing.
+    # This is tricky as the state update from this function isn't immediate.
+    # Best handled by the node that sets _routing_target also clearing it, or by ensuring process_error_feedback_node clears it before returning.
+    # For now, we assume process_error_feedback_node handles clearing it from its returned dict.
+    # However, a direct state modification like `state["_routing_target"] = None` is not possible here as it's a TypedDict.
+    # The node process_error_feedback_node should return the state *without* _routing_target if it's consumed.
+    # Let's refine process_error_feedback_node to set _routing_target to None in its return if consumed.
+
+    if routing_target == "execute_research":
+        logger.info("Routing to 'execute_research' after error processing.")
+        return "execute_research"
+    elif routing_target == "request_error_feedback": # e.g. invalid feedback from user
+        logger.info("Routing back to 'request_error_feedback' after error processing.")
+        return "request_error_feedback"
+    elif routing_target == "end_run": # Explicitly told to end by process_error_feedback_node (e.g. abort)
+        logger.info("Routing to 'end_run' after error processing.")
+        return "end_run"
+    else:
+        # Default fallback or if routing_target is None (should not happen if logic is correct)
+        logger.warning(f"Unknown or missing routing target: '{routing_target}'. Defaulting to 'end_run'.")
+        return "end_run"
 
 
 # --- DeepSearchAgent Class ---
@@ -1055,30 +1229,67 @@ class DeepResearchAgent:
         workflow.add_node("plan_research", planning_node)
         workflow.add_node("execute_research", research_execution_node)
         workflow.add_node("synthesize_report", synthesis_node)
+        workflow.add_node("request_final_confirmation", request_final_confirmation_node)
+        workflow.add_node("request_error_feedback", request_error_feedback_node) # New error node
+        workflow.add_node("process_error_feedback", process_error_feedback_node) # New error processing node
         workflow.add_node(
             "end_run", lambda state: logger.info("--- Reached End Run Node ---") or {}
-        )  # Simple end node
+        )
 
-        # Define edges
         workflow.set_entry_point("plan_research")
+        workflow.add_edge("plan_research", "execute_research")
 
-        workflow.add_edge(
-            "plan_research", "execute_research"
-        )  # Always execute after planning
+        # Conditional edge from execute_research
+        # It now needs to check for awaiting_error_feedback first
+        def route_from_execute_research(state: DeepResearchState) -> str:
+            if state.get("awaiting_error_feedback"):
+                return "request_error_feedback" # Error occurred, go to feedback
+            return should_continue(state) # Normal continuation logic
 
-        # Conditional edge after execution
         workflow.add_conditional_edges(
             "execute_research",
-            should_continue,
+            route_from_execute_research, # Use the new routing function
             {
-                "execute_research": "execute_research",  # Loop back if more steps
-                "synthesize_report": "synthesize_report",  # Move to synthesis if done
-                "end_run": "end_run",  # End if stop requested or error
+                "request_error_feedback": "request_error_feedback", # Route to request error feedback
+                "execute_research": "execute_research",
+                "synthesize_report": "synthesize_report",
+                "request_final_confirmation": "request_final_confirmation",
+                "end_run": "end_run",
             },
         )
 
-        workflow.add_edge("synthesize_report", "end_run")  # End after synthesis
+        # Conditional edge from request_final_confirmation (unchanged from previous)
+        workflow.add_conditional_edges(
+            "request_final_confirmation",
+            did_user_confirm_synthesis,
+            {
+                "synthesize_report": "synthesize_report",
+                "wait_for_confirmation": "request_final_confirmation",
+            }
+        )
 
+        # Edges for error handling flow
+        workflow.add_conditional_edges(
+            "request_error_feedback",
+            did_user_provide_error_feedback,
+            {
+                "process_error_feedback": "process_error_feedback",
+                "wait_for_error_feedback": "request_error_feedback", # Loop back to wait
+            }
+        )
+        workflow.add_conditional_edges(
+            "process_error_feedback",
+            route_after_error_processing,
+            {
+                "execute_research": "execute_research", # Retry
+                "request_error_feedback": "request_error_feedback", # e.g. invalid user input
+                # If "skip" was chosen, process_error_feedback updates indices and routes to "execute_research",
+                # which then calls should_continue to determine the true next step (next task or next cat or synth).
+                "end_run": "end_run", # Abort
+            }
+        )
+
+        workflow.add_edge("synthesize_report", "end_run")
         app = workflow.compile()
         return app
 
@@ -1141,9 +1352,17 @@ class DeepResearchAgent:
             "browser_config": self.browser_config,
             "final_report": None,
             "current_category_index": 0,
+            "current_category_index": 0,
             "current_task_index_in_category": 0,
             "stop_requested": False,
-            "error_message": None,
+            "error_message": None, # This is for general, non-feedback errors
+            "awaiting_final_confirmation": False,
+            "user_confirmed_synthesis": False,
+            "awaiting_error_feedback": False, # Init new error fields
+            "error_details": None,
+            "user_feedback_on_error": None,
+            "current_error_node_origin": None,
+            "_routing_target": None,
         }
 
         if task_id:
@@ -1169,12 +1388,35 @@ class DeepResearchAgent:
         status = "unknown"
         message = None
         try:
-            logger.info(f"Invoking graph execution for task {self.current_task_id}...")
-            self.runner = asyncio.create_task(self.graph.ainvoke(initial_state))
+            logger.info(f"Invoking graph execution for task {self.current_task_id} with checkpointing.")
+            # Use thread_id for checkpointing
+            config = {"configurable": {"thread_id": self.current_task_id}}
+            self.runner = asyncio.create_task(self.graph.ainvoke(initial_state, config=config))
             final_state = await self.runner
-            logger.info(f"Graph execution finished for task {self.current_task_id}.")
+            logger.info(f"Graph execution attempt finished for task {self.current_task_id}.")
 
-            # Determine status based on final state
+            if final_state and final_state.get("awaiting_final_confirmation"):
+                logger.info(f"Task {self.current_task_id} is awaiting final confirmation.")
+                # Return a specific status indicating pause, do not clean up yet.
+                return {
+                    "status": "awaiting_confirmation",
+                    "message": "Research process paused, awaiting final confirmation before synthesis.",
+                    "task_id": self.current_task_id,
+                    "current_state": final_state,
+                }
+
+            if final_state and final_state.get("awaiting_error_feedback"):
+                logger.info(f"Task {self.current_task_id} is awaiting error feedback.")
+                return {
+                    "status": "awaiting_error_feedback",
+                    "message": f"Research process paused due to error: {final_state.get('error_details')}. Awaiting user feedback.",
+                    "task_id": self.current_task_id,
+                    "error_details": final_state.get("error_details"),
+                    "current_error_node_origin": final_state.get("current_error_node_origin"),
+                    "current_state": final_state,
+                }
+
+            # If not awaiting confirmation or error feedback, proceed to determine final status
             if self.stop_event and self.stop_event.is_set():
                 status = "stopped"
                 message = "Research process was stopped by request."
@@ -1182,46 +1424,60 @@ class DeepResearchAgent:
             elif final_state and final_state.get("error_message"):
                 status = "error"
                 message = final_state["error_message"]
-                logger.error(f"Graph execution completed with error: {message}")
+                logger.error(f"Graph execution completed with error for task {self.current_task_id}: {message}")
             elif final_state and final_state.get("final_report"):
                 status = "completed"
                 message = "Research process completed successfully."
                 logger.info(message)
             else:
-                # If it ends without error/report (e.g., empty plan, stopped before synthesis)
                 status = "finished_incomplete"
-                message = "Research process finished, but may be incomplete (no final report generated)."
-                logger.warning(message)
+                message = "Research process finished, but may be incomplete or in an unexpected state."
+                logger.warning(f"{message} for task {self.current_task_id}. Final state: {final_state}")
 
         except asyncio.CancelledError:
             status = "cancelled"
             message = f"Agent run task cancelled for {self.current_task_id}."
             logger.info(message)
-            # final_state will remain None or the state before cancellation if checkpointing was used
+            final_state = None # No meaningful final state on cancellation
         except Exception as e:
             status = "error"
             message = f"Unhandled error during graph execution for {self.current_task_id}: {e}"
             logger.error(message, exc_info=True)
-            # final_state will remain None or the state before the error
+            final_state = None # No meaningful final state on such error
         finally:
-            logger.info(f"Cleaning up resources for task {self.current_task_id}")
-            task_id_to_clean = self.current_task_id
+            # Cleanup only if the task is not paused (either for confirmation or error feedback)
+            is_paused_for_confirmation = final_state and final_state.get("awaiting_final_confirmation")
+            is_paused_for_error = final_state and final_state.get("awaiting_error_feedback")
 
-            self.stop_event = None
-            self.current_task_id = None
-            self.runner = None  # Mark runner as finished
-            if self.mcp_client:
-                await self.mcp_client.__aexit__(None, None, None)
+            if not (is_paused_for_confirmation or is_paused_for_error):
+                logger.info(f"Performing final cleanup for task {self.current_task_id}")
+                task_id_to_clean = self.current_task_id # Capture before clearing
+                if task_id_to_clean and task_id_to_clean in _AGENT_STOP_FLAGS: # Check if task_id_to_clean is not None
+                    del _AGENT_STOP_FLAGS[task_id_to_clean]
 
-            # Return a result dictionary including the status and the final state if available
-            return {
-                "status": status,
-                "message": message,
-                "task_id": task_id_to_clean,  # Use the stored task_id
-                "final_state": final_state
-                if final_state
-                else {},  # Return the final state dict
-            }
+                self.stop_event = None
+                self.current_task_id = None
+                self.runner = None
+                if self.mcp_client:
+                    await self.mcp_client.__aexit__(None, None, None)
+                    self.mcp_client = None
+            else:
+                if is_paused_for_confirmation:
+                    logger.info(f"Task {self.current_task_id} is paused for final confirmation. Skipping full cleanup.")
+                if is_paused_for_error:
+                    logger.info(f"Task {self.current_task_id} is paused for error feedback. Skipping full cleanup.")
+
+        # This return is for terminal states (completed, stopped, error, etc.) or if somehow final_state was None
+        # If paused, the return happened inside the try block.
+            # Need to ensure task_id_to_clean is defined if self.current_task_id was cleared.
+            task_id_for_return = self.current_task_id if self.current_task_id else (task_id_to_clean if 'task_id_to_clean' in locals() else None)
+
+        return {
+            "status": status,
+            "message": message,
+                "task_id": task_id_for_return,
+            "final_state": final_state if final_state else {},
+        }
 
     async def _stop_lingering_browsers(self, task_id):
         """Attempts to stop any BrowserUseAgent instances associated with the task_id."""
@@ -1259,3 +1515,241 @@ class DeepResearchAgent:
 
     def close(self):
         self.stopped = False
+
+    async def provide_final_confirmation(self):
+        """
+        External method to signal that the user has confirmed synthesis and resume graph execution.
+        """
+        if not self.current_task_id or not self.graph:
+            logger.warning("Cannot provide final confirmation: No active task_id or graph.")
+            return {"status": "error", "message": "No active task or graph to confirm."}
+
+        if self.stop_event and self.stop_event.is_set():
+            logger.warning(f"Stop event is set for task {self.current_task_id}. Cannot provide confirmation.")
+            # Perform cleanup as if it was stopped.
+            # This logic might be redundant if stop() is comprehensive.
+            if self.current_task_id in _AGENT_STOP_FLAGS:
+                del _AGENT_STOP_FLAGS[self.current_task_id]
+            self.stop_event = None
+            cleared_task_id = self.current_task_id
+            self.current_task_id = None
+            self.runner = None
+            return {
+                "status": "stopped",
+                "message": "Task was stopped before confirmation could be processed.",
+                "task_id": cleared_task_id,
+            }
+
+        logger.info(f"User confirmation received for task {self.current_task_id}. Attempting to resume.")
+        config = {"configurable": {"thread_id": self.current_task_id}}
+
+        try:
+            # Fetch current state to correctly update messages
+            # Note: get_state might return the full state including config, need to access actual values.
+            # LangGraph's get_state can be complex; assuming it returns a snapshot we can work with.
+            # If a Checkpointer is configured, get_state on the graph object itself is the right way.
+            graph_snapshot = self.graph.get_state(config) # Get current state using thread_id
+            current_messages = graph_snapshot.values.get("messages", []) if graph_snapshot else []
+
+            updated_messages = current_messages + [SystemMessage(content="User confirmed. Proceeding to synthesis.")]
+
+            logger.info(f"Updating state for task {self.current_task_id} with user confirmation.")
+            await self.graph.update_state(
+                config, # Pass the config with thread_id
+                {
+                    "user_confirmed_synthesis": True,
+                    "awaiting_final_confirmation": False,
+                    "messages": updated_messages,
+                    "stop_requested": False # Ensure stop_requested is False if we are resuming
+                }
+            )
+            logger.info(f"State updated. Re-invoking graph for task {self.current_task_id} to continue.")
+            # Re-invoke the graph. Pass None as input to continue from the checkpoint.
+            continued_state = await self.graph.ainvoke(None, config=config)
+            logger.info(f"Graph re-invocation finished for task {self.current_task_id}.")
+
+            # Process the continued_state to determine the final outcome
+            status = "unknown"
+            message = ""
+            if self.stop_event and self.stop_event.is_set(): # Check if stop was called during re-invocation
+                status = "stopped"
+                message = f"Research process for task {self.current_task_id} was stopped during continuation."
+            elif continued_state and continued_state.get("error_message"):
+                status = "error"
+                message = continued_state["error_message"]
+            elif continued_state and continued_state.get("final_report"):
+                status = "completed"
+                message = "Research process completed successfully after confirmation."
+            elif continued_state and continued_state.get("awaiting_final_confirmation"):
+                status = "awaiting_confirmation" # It might have gone to error, then retry, then finished tasks and now waits for final confirm
+                message = f"Task {self.current_task_id} is now awaiting final confirmation after previous interaction."
+                logger.info(message)
+                # Do not clean up fully if it's now paused for confirmation
+                return {
+                    "status": status,
+                    "message": message,
+                    "task_id": self.current_task_id,
+                    "current_state": continued_state,
+                }
+            elif continued_state and continued_state.get("awaiting_error_feedback"):
+                status = "awaiting_error_feedback" # Retry might have failed again
+                message = f"Task {self.current_task_id} is again awaiting error feedback: {continued_state.get('error_details')}."
+                logger.info(message)
+                # Do not clean up fully if it's now paused for error
+                return {
+                    "status": status,
+                    "message": message,
+                    "task_id": self.current_task_id,
+                    "error_details": continued_state.get("error_details"),
+                    "current_error_node_origin": continued_state.get("current_error_node_origin"),
+                    "current_state": continued_state,
+                }
+            else: # Truly terminal states
+                status = "finished_incomplete"
+                message = f"Processing continued for task {self.current_task_id} but did not produce a final report as expected."
+                logger.warning(f"{message} - Continued state: {continued_state}")
+
+            # Final cleanup only for truly terminal states from this method
+            logger.info(f"Performing final cleanup for task {self.current_task_id} after provide_final_confirmation resolution.")
+            task_id_to_clean = self.current_task_id # Capture before clearing
+            if task_id_to_clean and task_id_to_clean in _AGENT_STOP_FLAGS:
+                 del _AGENT_STOP_FLAGS[task_id_to_clean]
+            self.stop_event = None
+            self.current_task_id = None
+            self.runner = None
+            if self.mcp_client:
+                await self.mcp_client.__aexit__(None, None, None)
+                self.mcp_client = None
+
+            return {
+                "status": status,
+                "message": message,
+                "task_id": task_id_to_clean,
+                "final_state": continued_state if continued_state else {}
+            }
+
+        except Exception as e:
+            logger.error(f"Error during final confirmation processing for task {self.current_task_id}: {e}", exc_info=True)
+            task_id_on_error = self.current_task_id # Capture before potentially clearing
+            # Attempt cleanup even on error
+            if task_id_on_error and task_id_on_error in _AGENT_STOP_FLAGS:
+                del _AGENT_STOP_FLAGS[task_id_on_error]
+            self.stop_event = None
+            self.current_task_id = None
+            self.runner = None
+            if self.mcp_client: # Ensure mcp_client is cleaned up on exception too
+                await self.mcp_client.__aexit__(None, None, None)
+                self.mcp_client = None
+            return {"status": "error", "message": f"Failed to process confirmation and continue: {e}", "task_id": task_id_on_error}
+
+
+    async def provide_error_feedback(self, feedback: str) -> Dict[str, Any]:
+        """
+        External method for user to provide feedback on an error and resume graph execution.
+        """
+        if not self.current_task_id or not self.graph:
+            logger.warning("Cannot provide error feedback: No active task_id or graph.")
+            return {"status": "error", "message": "No active task or graph for error feedback."}
+
+        if self.stop_event and self.stop_event.is_set():
+            logger.warning(f"Stop event is set for task {self.current_task_id}. Cannot provide error feedback.")
+            task_id_on_stop = self.current_task_id
+            # Perform cleanup as if it was stopped.
+            if task_id_on_stop in _AGENT_STOP_FLAGS: del _AGENT_STOP_FLAGS[task_id_on_stop]
+            self.stop_event = None
+            self.current_task_id = None
+            self.runner = None
+            return {
+                "status": "stopped",
+                "message": "Task was stopped before error feedback could be processed.",
+                "task_id": task_id_on_stop,
+            }
+
+        logger.info(f"User error feedback '{feedback}' received for task {self.current_task_id}. Attempting to resume.")
+        config = {"configurable": {"thread_id": self.current_task_id}}
+
+        try:
+            graph_snapshot = self.graph.get_state(config)
+            current_messages = graph_snapshot.values.get("messages", []) if graph_snapshot else []
+            updated_messages = current_messages + [SystemMessage(content=f"User provided error feedback: '{feedback}'.")]
+
+            logger.info(f"Updating state for task {self.current_task_id} with error feedback.")
+            await self.graph.update_state(
+                config,
+                {
+                    "user_feedback_on_error": feedback,
+                    "awaiting_error_feedback": False, # We are processing it now
+                    "messages": updated_messages,
+                    "stop_requested": False
+                }
+            )
+            logger.info(f"State updated. Re-invoking graph for task {self.current_task_id} to process feedback.")
+            continued_state = await self.graph.ainvoke(None, config=config) # Input is None to resume
+            logger.info(f"Graph re-invocation after error feedback finished for task {self.current_task_id}.")
+
+            status = "unknown"
+            message = ""
+
+            if self.stop_event and self.stop_event.is_set():
+                status = "stopped"
+                message = f"Research process for task {self.current_task_id} was stopped during error feedback processing."
+            elif continued_state and continued_state.get("awaiting_error_feedback"):
+                status = "awaiting_error_feedback" # e.g. retry failed, or feedback was invalid.
+                message = f"Task {self.current_task_id} is again awaiting error feedback: {continued_state.get('error_details')}."
+                logger.info(message)
+                # Do not clean up fully if it's paused again
+                return {
+                    "status": status, "message": message, "task_id": self.current_task_id,
+                    "error_details": continued_state.get("error_details"),
+                    "current_error_node_origin": continued_state.get("current_error_node_origin"),
+                    "current_state": continued_state,
+                }
+            elif continued_state and continued_state.get("awaiting_final_confirmation"):
+                status = "awaiting_confirmation" # e.g. skip error, finished all tasks, now needs final confirmation
+                message = f"Task {self.current_task_id} is now awaiting final confirmation after error feedback processing."
+                logger.info(message)
+                # Do not clean up fully if it's paused for confirmation
+                return {
+                    "status": status, "message": message, "task_id": self.current_task_id,
+                    "current_state": continued_state,
+                }
+            elif continued_state and continued_state.get("error_message"): # General error from a node after resuming
+                status = "error"
+                message = continued_state["error_message"]
+            elif continued_state and continued_state.get("final_report"):
+                status = "completed"
+                message = "Research process completed successfully after error feedback."
+            else:
+                status = "finished_incomplete"
+                message = f"Processing continued for task {self.current_task_id} after error feedback, but result is indeterminate."
+                logger.warning(f"{message} - Continued state: {continued_state}")
+
+            # Final cleanup for terminal states from this method
+            logger.info(f"Performing final cleanup for task {self.current_task_id} after provide_error_feedback resolution.")
+            task_id_to_clean = self.current_task_id
+            if task_id_to_clean and task_id_to_clean in _AGENT_STOP_FLAGS:
+                del _AGENT_STOP_FLAGS[task_id_to_clean]
+            self.stop_event = None
+            self.current_task_id = None
+            self.runner = None
+            if self.mcp_client:
+                await self.mcp_client.__aexit__(None, None, None)
+                self.mcp_client = None
+
+            return {
+                "status": status, "message": message, "task_id": task_id_to_clean,
+                "final_state": continued_state if continued_state else {}
+            }
+
+        except Exception as e:
+            logger.error(f"Error during error feedback processing for task {self.current_task_id}: {e}", exc_info=True)
+            task_id_on_error = self.current_task_id
+            if task_id_on_error and task_id_on_error in _AGENT_STOP_FLAGS:
+                del _AGENT_STOP_FLAGS[task_id_on_error]
+            self.stop_event = None
+            self.current_task_id = None
+            self.runner = None
+            if self.mcp_client:
+                await self.mcp_client.__aexit__(None, None, None)
+                self.mcp_client = None
+            return {"status": "error", "message": f"Failed to process error feedback and continue: {e}", "task_id": task_id_on_error}
