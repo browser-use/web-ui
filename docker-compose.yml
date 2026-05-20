@@ -1,17 +1,18 @@
 services:
   # debug: docker compose run --rm -it browser-use-webui bash
   browser-use-webui:
-    # image: ghcr.io/browser-use/web-ui # Using precompiled image
+    # image: ghcr.io/browser-use/web-ui:latest # Using precompiled image
     build:
       context: .
       dockerfile: Dockerfile
       args:
         TARGETPLATFORM: ${TARGETPLATFORM:-linux/amd64}
     ports:
-      - "7788:7788"
-      - "6080:6080"
-      - "5901:5901"
-      - "9222:9222"
+      - "127.0.0.1:7788:7788"
+      - "0.0.0.0:6080:6080"
+      - "127.0.0.1:5901:5901"
+      # CDP: socat forwards 9222 -> Chrome 9223. With LAUNCH_BROWSER_AT_STARTUP=true, browser starts at boot and CDP is available on 127.0.0.1:9222.
+      - "127.0.0.1:9222:9222"
     environment:
       # LLM API Keys & Endpoints
       - OPENAI_ENDPOINT=${OPENAI_ENDPOINT:-https://api.openai.com/v1}
@@ -43,30 +44,35 @@ services:
       - ANONYMIZED_TELEMETRY=${ANONYMIZED_TELEMETRY:-false}
       - BROWSER_USE_LOGGING_LEVEL=${BROWSER_USE_LOGGING_LEVEL:-info}
 
-      # Browser Settings
+      # Browser Settings (paths are inside the container; ./profiles is mounted at /profiles)
       - BROWSER_PATH=
-      - BROWSER_USER_DATA=
-      - BROWSER_DEBUGGING_PORT=${BROWSER_DEBUGGING_PORT:-9222}
-      - BROWSER_DEBUGGING_HOST=localhost
+      - BROWSER_USER_DATA=/profiles/agent-default
+      # Chrome CDP: in Docker, Chrome listens on 127.0.0.1:9223 only (Chromium ignores 0.0.0.0). socat forwards 0.0.0.0:9222 -> 127.0.0.1:9223.
+      - BROWSER_DEBUGGING_PORT=${BROWSER_DEBUGGING_PORT:-9223}
+      - BROWSER_DEBUGGING_HOST=0.0.0.0
       - USE_OWN_BROWSER=false
       - KEEP_BROWSER_OPEN=true
-      - BROWSER_CDP=${BROWSER_CDP:-} # e.g., http://localhost:9222
+      # Startup browser: when true, Chromium starts at container boot (visible in VNC); CDP on 9222 available shortly after. Set STARTUP_BROWSER_HEADLESS=1 for headless-only.
+      - LAUNCH_BROWSER_AT_STARTUP=${LAUNCH_BROWSER_AT_STARTUP:-true}
+      - BROWSER_CDP=${BROWSER_CDP:-http://127.0.0.1:9222}
+      - PLAYWRIGHT_LAUNCH_ARGS=--no-sandbox --disable-blink-features=AutomationControlled --disable-dev-shm-usage --disable-infobars --disable-features=TranslateUI --remote-debugging-port=9223 --disable-extensions-except=/ms-playwright/stealth-extension --load-extension=/ms-playwright/stealth-extension
 
       # Display Settings
       - DISPLAY=:99
-      # This ENV is used by the Dockerfile during build time if playwright respects it.
-      # It's not strictly needed at runtime by docker-compose unless your app or scripts also read it.
-      - PLAYWRIGHT_BROWSERS_PATH=/ms-browsers # Matches Dockerfile ENV
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
       - RESOLUTION=${RESOLUTION:-1920x1080x24}
       - RESOLUTION_WIDTH=${RESOLUTION_WIDTH:-1920}
       - RESOLUTION_HEIGHT=${RESOLUTION_HEIGHT:-1080}
 
       # VNC Settings
-      - VNC_PASSWORD=${VNC_PASSWORD:-youvncpassword}
+      - VNC_PASSWORD=${VNC_PASSWORD:-}
 
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      # - ./my_chrome_data:/app/data/chrome_data # Optional: persist browser data
+      - ./data:/data
+      - ./profiles:/profiles
+      - ./output:/output
+      - ./stealth-extension:/ms-playwright/stealth-extension
     restart: unless-stopped
     shm_size: "2gb"
     cap_add:

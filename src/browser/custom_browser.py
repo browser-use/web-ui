@@ -63,8 +63,9 @@ class CustomBrowser(Browser):
             screen_size = get_screen_resolution()
             offset_x, offset_y = get_window_adjustments()
 
-        chrome_args = {
-            f'--remote-debugging-port={self.config.chrome_remote_debugging_port}',
+        port_arg = f'--remote-debugging-port={self.config.chrome_remote_debugging_port}'
+        chrome_args = [
+            port_arg,
             *CHROME_ARGS,
             *(CHROME_DOCKER_ARGS if IN_DOCKER else []),
             *(CHROME_HEADLESS_ARGS if self.config.headless else []),
@@ -73,17 +74,21 @@ class CustomBrowser(Browser):
             f'--window-position={offset_x},{offset_y}',
             f'--window-size={screen_size["width"]},{screen_size["height"]}',
             *self.config.extra_browser_args,
-        }
+        ]
 
-        # check if chrome remote debugging port is already taken,
-        # if so remove the remote-debugging-port arg to prevent conflicts
+        # (Chrome ignores --remote-debugging-address=0.0.0.0 in recent versions; use socat in Docker to expose 9222.)
+
+        # If chrome remote debugging port is already taken, remove our port arg to avoid conflict
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(('localhost', self.config.chrome_remote_debugging_port)) == 0:
-                chrome_args.remove(f'--remote-debugging-port={self.config.chrome_remote_debugging_port}')
+                try:
+                    chrome_args.remove(port_arg)
+                except ValueError:
+                    pass
 
         browser_class = getattr(playwright, self.config.browser_class)
         args = {
-            'chromium': list(chrome_args),
+            'chromium': chrome_args,
             'firefox': [
                 *{
                     '-no-remote',

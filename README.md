@@ -145,6 +145,11 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
   - Default VNC password: "youvncpassword"
   - Can be changed by setting `VNC_PASSWORD` in your `.env` file
 
+#### Using Browser-Use CLI or Python with the Docker browser (CDP)
+Port **9222** is exposed so you can connect from the host to the browser inside the container. See **[docs/CLI_AND_DOCKER_CDP.md](docs/CLI_AND_DOCKER_CDP.md)** for:
+- Python: `Browser(cdp_url="http://127.0.0.1:9222")` to use the container's browser
+- CLI: `BROWSER_CDP=http://127.0.0.1:9222` or running the CLI inside the container
+
 ## Changelog
 - [x] **2025/01/26:** Thanks to @vvincent1234. Now browser-use-webui can combine with DeepSeek-r1 to engage in deep thinking!
 - [x] **2025/01/10:** Thanks to @casistack. Now we have Docker Setup option and also Support keep browser open between tasks.[Video tutorial demo](https://github.com/browser-use/web-ui/issues/1#issuecomment-2582511750).

@@ -190,3 +190,5 @@ data/
 *.pdf
 
 workflow
+profiles/
+vpn/client.ovpn

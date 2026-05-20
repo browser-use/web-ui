@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     net-tools \
     procps \
+    socat \
     git \
     python3-numpy \
     fontconfig \
