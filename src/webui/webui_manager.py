@@ -1,6 +1,6 @@
 import json
 from collections.abc import Generator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import os
 import gradio as gr
 from datetime import datetime
@@ -56,6 +56,8 @@ class WebuiManager:
         """
         for comp_name, component in components_dict.items():
             comp_id = f"{tab_name}.{comp_name}"
+            if hasattr(component, "elem_id") and not getattr(component, "elem_id", None):
+                component.elem_id = f"webui-{tab_name}-{comp_name}".replace(".", "-").replace("_", "-")
             self.id_to_component[comp_id] = component
             self.component_to_id[component] = comp_id
 
@@ -77,7 +79,7 @@ class WebuiManager:
         """
         return self.component_to_id[comp]
 
-    def save_config(self, components: Dict["Component", str]) -> None:
+    def save_config(self, components: Dict["Component", str]) -> str:
         """
         Save config
         """
@@ -94,29 +96,26 @@ class WebuiManager:
 
         return os.path.join(self.settings_save_dir, f"{config_name}.json")
 
-    def load_config(self, config_path: str):
+    def load_config(self, config_path: str) -> Generator[Dict[Component, Any], None, None]:
         """
         Load config
         """
         with open(config_path, "r") as fr:
-            ui_settings = json.load(fr)
+            ui_settings: Dict[str, Any] = json.load(fr)
 
-        update_components = {}
+        update_components: Dict[Component, Any] = {}
         for comp_id, comp_val in ui_settings.items():
             if comp_id in self.id_to_component:
                 comp = self.id_to_component[comp_id]
-                if comp.__class__.__name__ == "Chatbot":
-                    update_components[comp] = comp.__class__(value=comp_val, type="messages")
-                else:
-                    update_components[comp] = comp.__class__(value=comp_val)
-                    if comp_id == "agent_settings.planner_llm_provider":
-                        yield update_components  # yield provider, let callback run
-                        time.sleep(0.1)  # wait for Gradio UI callback
+                update_components[comp] = gr.update(value=comp_val)
+                if comp_id == "agent_settings.planner_llm_provider":
+                    yield update_components  # yield provider, let callback run
+                    time.sleep(0.1)  # wait for Gradio UI callback
 
         config_status = self.id_to_component["load_save_config.config_status"]
         update_components.update(
             {
-                config_status: config_status.__class__(value=f"Successfully loaded config: {config_path}")
+                config_status: gr.update(value=f"Successfully loaded config: {config_path}")
             }
         )
         yield update_components
