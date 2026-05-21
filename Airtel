@@ -1,0 +1,319 @@
+app/src/main/AndroidManifest.xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.gn.airtelattendance">
+
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+    <application
+        android:allowBackup="true"
+        android:label="Airtel Attendance App"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.AirtelAttendance">
+        <activity android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"/>
+    </application>
+
+</manifest>
+app/src/main/java/com/gn/airtelattendance/SplashActivity.kt
+package com.gn.airtelattendance
+
+import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import androidx.activity.ComponentActivity
+
+class SplashActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // theme-based splash (see styles)
+        Handler(Looper.getMainLooper()).postDelayed({
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+        }, 1200) // 1.2s
+    }
+}
+app/src/main/java/com/gn/airtelattendance/MainActivity.kt
+package com.gn.airtelattendance
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Bundle
+import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.Toolbar
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import java.lang.Exception
+
+class MainActivity : ComponentActivity() {
+
+    private lateinit var webView: WebView
+    private lateinit var swipe: SwipeRefreshLayout
+    private val url = "https://forms.gle/3zbwmyRZ7V2TrSy47"
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        toolbar.title = "Airtel Attendance App"
+        toolbar.setNavigationOnClickListener { finish() }
+
+        swipe = findViewById(R.id.swipe)
+        webView = findViewById(R.id.webview)
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                return false
+            }
+            override fun onReceivedError(view: WebView, errorCode: Int, description: String?, failingUrl: String?) {
+                showOfflineDialog()
+            }
+        }
+        webView.webChromeClient = WebChromeClient()
+
+        swipe.setOnRefreshListener {
+            if (isOnline()) {
+                webView.reload()
+            } else {
+                swipe.isRefreshing = false
+                showOfflineDialog()
+            }
+        }
+
+        // load
+        if (isOnline()) webView.loadUrl(url) else showOfflineDialog()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when(item.itemId) {
+            R.id.action_refresh -> {
+                if (isOnline()) {
+                    webView.reload()
+                    Toast.makeText(this, "Refreshing...", Toast.LENGTH_SHORT).show()
+                } else showOfflineDialog()
+            }
+            R.id.action_share -> {
+                try {
+                    val i = android.content.Intent().apply {
+                        action = android.content.Intent.ACTION_SEND
+                        putExtra(android.content.Intent.EXTRA_TEXT, url)
+                        type = "text/plain"
+                    }
+                    startActivity(android.content.Intent.createChooser(i, "Share link"))
+                } catch (e: Exception) { /* ignore */ }
+            }
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (::webView.isInitialized && keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
+            webView.goBack()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    private fun showOfflineDialog() {
+        swipe.isRefreshing = false
+        AlertDialog.Builder(this)
+            .setTitle("No Internet")
+            .setMessage("Internet connection not available. Please connect and try again.")
+            .setPositiveButton("Retry") { _, _ ->
+                if (isOnline()) webView.loadUrl(url) else Toast.makeText(this, "Still offline", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Open Settings") { _, _ ->
+                startActivity(android.provider.Settings.ACTION_WIFI_SETTINGS.let { android.content.Intent(it) })
+            }
+            .show()
+    }
+
+    private fun isOnline(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val n = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(n) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+    }
+
+    override fun onDestroy() {
+        if (::webView.isInitialized) {
+            webView.loadUrl("about:blank")
+        }
+        super.onDestroy()
+    }
+}
+app/src/main/res/layout/activity_main.xml
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="#E40000"
+        android:titleTextColor="#FFFFFF"/>
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="?attr/actionBarSize">
+
+        <WebView
+            android:id="@+id/webview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
+app/src/main/res/menu/main_menu.xml
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/action_refresh" android:title="Refresh" android:icon="@android:drawable/ic_menu_rotate" android:showAsAction="ifRoom"/>
+    <item android:id="@+id/action_share" android:title="Share" android:icon="@android:drawable/ic_menu_share" android:showAsAction="ifRoom"/>
+</menu>
+app/src/main/res/values/styles.xml
+<resources>
+    <style name="Theme.AirtelAttendance" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#E40000</item>
+        <item name="colorPrimaryVariant">#B00000</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+    </style>
+
+    <style name="Theme.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+</resources>
+app/src/main/res/drawable/splash_background.xml
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/airtel_red"/>
+    <item>
+        <bitmap android:gravity="center" android:src="@mipmap/ic_launcher"/>
+    </item>
+</layer-list>
+app/src/main/res/values/colors.xml
+<resources>
+    <color name="airtel_red">#E40000</color>
+</resources>
+adaptive icon XML (mipmap-anydpi-v26/ic_launcher.xml):
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/airtel_red"/>
+    <foreground android:drawable="@mipmap/ic_foreground_gn"/>
+</adaptive-icon>
+ic_foreground_gn.png
+app/build.gradle
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.gn.airtelattendance'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.gn.airtelattendance"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            // produce unsigned AAR/APK (you can add signing in CI if you want)
+            signingConfig null
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.10"
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.10.0'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.2.1'
+}
+Create file: .github/workflows/android-build.yml
+name: Android CI - Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload artifact (APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: airtel-attendance-apk
+          path: app/build/outputs/apk/debug/*.apk
