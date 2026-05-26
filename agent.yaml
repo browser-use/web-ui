@@ -1,0 +1,40 @@
+spec_version: "0.1.0"
+name: browser-use-web-ui
+version: 1.0.0
+description: >
+  A Gradio-based web interface for browser-use that lets any LLM (OpenAI,
+  Anthropic, Google, DeepSeek, Ollama, Mistral, and more) control a real
+  browser autonomously. Users describe a task in plain language; the agent
+  navigates websites, fills forms, extracts data, and produces results —
+  all visible in a live browser window. Also ships a Deep Research mode that
+  runs multi-step, multi-tab web research and writes a structured report.
+author: browser-use
+license: MIT
+
+model:
+  preferred: openai:gpt-4o
+  fallback:
+    - anthropic:claude-sonnet-4-6
+    - google:gemini-2.0-flash
+  constraints:
+    temperature: 0.6
+    max_tokens: 8192
+
+skills:
+  - browser-navigation
+  - deep-research
+  - form-filling
+  - data-extraction
+  - mcp-tool-use
+
+runtime:
+  max_turns: 100
+  timeout: 1800
+
+compliance:
+  risk_tier: standard
+  supervision:
+    human_in_the_loop: destructive
+    kill_switch: true
+  data_governance:
+    pii_handling: user-controlled
