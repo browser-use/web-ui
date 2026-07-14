@@ -1,3 +1,28 @@
+MINIMAX_MODELS = ["MiniMax-M3", "MiniMax-M2.7"]
+
+MINIMAX_PROVIDER_CONFIGS = {
+    "minimax": {
+        "protocol": "openai",
+        "endpoint_env": "MINIMAX_OPENAI_ENDPOINT",
+        "base_url": "https://api.minimax.io/v1",
+    },
+    "minimax_cn": {
+        "protocol": "openai",
+        "endpoint_env": "MINIMAX_CN_OPENAI_ENDPOINT",
+        "base_url": "https://api.minimaxi.com/v1",
+    },
+    "minimax_anthropic": {
+        "protocol": "anthropic",
+        "endpoint_env": "MINIMAX_ANTHROPIC_ENDPOINT",
+        "base_url": "https://api.minimax.io/anthropic",
+    },
+    "minimax_anthropic_cn": {
+        "protocol": "anthropic",
+        "endpoint_env": "MINIMAX_CN_ANTHROPIC_ENDPOINT",
+        "base_url": "https://api.minimaxi.com/anthropic",
+    },
+}
+
 PROVIDER_DISPLAY_NAMES = {
     "openai": "OpenAI",
     "azure_openai": "Azure OpenAI",
@@ -9,12 +34,20 @@ PROVIDER_DISPLAY_NAMES = {
     "unbound": "Unbound AI",
     "ibm": "IBM",
     "grok": "Grok",
+    "minimax": "MiniMax (Global, OpenAI-compatible)",
+    "minimax_cn": "MiniMax (China, OpenAI-compatible)",
+    "minimax_anthropic": "MiniMax (Global, Anthropic-compatible)",
+    "minimax_anthropic_cn": "MiniMax (China, Anthropic-compatible)",
 }
 
 # Predefined model names for common providers
 model_names = {
     "anthropic": ["claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20240620", "claude-3-opus-20240229"],
     "openai": ["gpt-4o", "gpt-4", "gpt-3.5-turbo", "o3-mini"],
+    "minimax": MINIMAX_MODELS,
+    "minimax_cn": MINIMAX_MODELS,
+    "minimax_anthropic": MINIMAX_MODELS,
+    "minimax_anthropic_cn": MINIMAX_MODELS,
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "google": ["gemini-2.0-flash", "gemini-2.0-flash-thinking-exp", "gemini-1.5-flash-latest",
                "gemini-1.5-flash-8b-latest", "gemini-2.0-flash-thinking-exp-01-21", "gemini-2.0-pro-exp-02-05",
