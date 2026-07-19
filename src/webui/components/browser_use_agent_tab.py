@@ -528,10 +528,10 @@ async def run_agent_task(
                 )
             assert main_llm is not None, "LLM instance (main_llm) must be initialized before creating the agent."
             enable_memory = True
-            model_name = getattr(main_llm, 'model_name', '')
-            if 'openai' not in model_name.lower():
+            current_provider = locals().get('llm_provider_name') or type(main_llm).__name__.lower()
+            if 'openai' not in current_provider.lower():
                 logger.warning(
-                    f"⚠️ Detected non-OpenAI model: {model_name}. "
+                    f"⚠️ Detected non-OpenAI model: {current_provider}. "
                     f"Disabling mem0 vector memory to avoid OpenAI API Key dependency."
                 )
                 enable_memory = False
