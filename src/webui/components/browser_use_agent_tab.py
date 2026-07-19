@@ -526,6 +526,15 @@ async def run_agent_task(
                 raise ValueError(
                     "Browser or Context not initialized, cannot create agent."
                 )
+            assert main_llm is not None, "LLM instance (main_llm) must be initialized before creating the agent."
+            enable_memory = True
+            current_provider = locals().get('llm_provider_name') or type(main_llm).__name__.lower()
+            if 'openai' not in current_provider.lower():
+                logger.warning(
+                    f"⚠️ Detected non-OpenAI model: {current_provider}. "
+                    f"Disabling mem0 vector memory to avoid OpenAI API Key dependency."
+                )
+                enable_memory = False
             webui_manager.bu_agent = BrowserUseAgent(
                 task=task,
                 llm=main_llm,
@@ -543,6 +552,7 @@ async def run_agent_task(
                 planner_llm=planner_llm,
                 use_vision_for_planner=planner_use_vision if planner_llm else False,
                 source="webui",
+                enable_memory=enable_memory,
             )
             webui_manager.bu_agent.state.agent_id = webui_manager.bu_agent_task_id
             webui_manager.bu_agent.settings.generate_gif = gif_path
