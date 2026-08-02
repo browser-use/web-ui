@@ -10,8 +10,8 @@ import asyncio
 import time
 
 from gradio.components import Component
-from browser_use.browser.browser import Browser
-from browser_use.browser.context import BrowserContext
+from browser_use import Browser
+from browser_use import BrowserContext
 from browser_use.agent.service import Agent
 from src.browser.custom_browser import CustomBrowser
 from src.browser.custom_context import CustomBrowserContext
