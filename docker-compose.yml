@@ -8,10 +8,10 @@ services:
       args:
         TARGETPLATFORM: ${TARGETPLATFORM:-linux/amd64}
     ports:
-      - "7788:7788"
-      - "6080:6080"
-      - "5901:5901"
-      - "9222:9222"
+    - "8501:8501"
+    - "6080:6080"
+    - "5901:5901"
+    - "9222:9222"
     environment:
       # LLM API Keys & Endpoints
       - OPENAI_ENDPOINT=${OPENAI_ENDPOINT:-https://api.openai.com/v1}
@@ -40,6 +40,13 @@ services:
       - IBM_PROJECT_ID=${IBM_PROJECT_ID:-}
 
       # Application Settings
+      # Application Settings
+
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - LLM_MODEL=${LLM_MODEL:-qwen3:8b}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.1}
+
       - ANONYMIZED_TELEMETRY=${ANONYMIZED_TELEMETRY:-false}
       - BROWSER_USE_LOGGING_LEVEL=${BROWSER_USE_LOGGING_LEVEL:-info}
 
@@ -68,7 +75,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
       # - ./my_chrome_data:/app/data/chrome_data # Optional: persist browser data
     restart: unless-stopped
-    shm_size: "2gb"
+    shm_size: '2gb'
     cap_add:
       - SYS_ADMIN
     tmpfs:

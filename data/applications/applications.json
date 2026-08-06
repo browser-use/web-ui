@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "job_title": "Applied AI Engineer",
+    "company": "USAFacts",
+    "job_url": "https://www.linkedin.com/jobs/search/?currentJobId=4270784374&f_E=2%2C4&f_TPR=r86400&geoId=103644278&keywords=data%20scientist&origin=JOB_SEARCH_PAGE_JOB_FILTER&refresh=true&spellCorrectionEnabled=true",
+    "status": "Submitted",
+    "applied_date": "2025-07-22T15:12:37.194415",
+    "notes": "Application submitted successfully.",
+    "application_method": "Easy Apply",
+    "job_location": "",
+    "salary_range": "",
+    "application_duration_seconds": 0.0,
+    "platform": "LinkedIn"
+  },
+  {
+    "id": 2,
+    "job_title": "Data Scientist",
+    "company": "LanceSoft, Inc.",
+    "job_url": "https://www.linkedin.com/jobs/search/post-apply/default/?currentJobId=4270787019&f_E=2%2C4&f_TPR=r86400&geoId=103644278&keywords=data%20scientist&origin=JOB_SEARCH_PAGE_JOB_FILTER&postApplyJobId=4270787019&refresh=true&spellCorrectionEnabled=true",
+    "status": "Success",
+    "applied_date": "2025-07-22T16:02:44.363467",
+    "notes": "Application sent to LanceSoft, Inc.",
+    "application_method": "Easy Apply",
+    "job_location": "",
+    "salary_range": "",
+    "application_duration_seconds": 0.0,
+    "platform": "LinkedIn"
+  },
+  {
+    "id": 3,
+    "job_title": "Python Developer with testing experience (Healthcare)",
+    "company": "FUSTIS LLC",
+    "job_url": "https://www.linkedin.com/jobs/search/post-apply/default/?currentJobId=4272212204&f_E=2%2C4&f_TPR=r86400&geoId=103644278&keywords=data%20scientist&origin=JOB_SEARCH_PAGE_JOB_FILTER&postApplyJobId=4272212204&refresh=true&spellCorrectionEnabled=true",
+    "status": "Success",
+    "applied_date": "2025-07-22T16:51:30.169346",
+    "notes": "Application sent successfully to FUSTIS LLC.",
+    "application_method": "Easy Apply",
+    "job_location": "",
+    "salary_range": "",
+    "application_duration_seconds": 0.0,
+    "platform": "LinkedIn"
+  }
+]

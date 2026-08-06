@@ -1,5 +1,4 @@
 import os
-from distutils.util import strtobool
 import gradio as gr
 import logging
 from gradio.components import Component
@@ -8,6 +7,17 @@ from src.webui.webui_manager import WebuiManager
 from src.utils import config
 
 logger = logging.getLogger(__name__)
+
+def str_to_bool(value):
+    """Convert string to boolean, similar to distutils.util.strtobool"""
+    if isinstance(value, bool):
+        return value
+    if value.lower() in ('yes', 'true', 't', 'y', '1', 'on'):
+        return True
+    elif value.lower() in ('no', 'false', 'f', 'n', '0', 'off'):
+        return False
+    else:
+        return False
 
 async def close_browser(webui_manager: WebuiManager):
     """
@@ -52,13 +62,13 @@ def create_browser_settings_tab(webui_manager: WebuiManager):
         with gr.Row():
             use_own_browser = gr.Checkbox(
                 label="Use Own Browser",
-                value=bool(strtobool(os.getenv("USE_OWN_BROWSER", "false"))),
+                value=str_to_bool(os.getenv("USE_OWN_BROWSER", "false")),
                 info="Use your existing browser instance",
                 interactive=True
             )
             keep_browser_open = gr.Checkbox(
                 label="Keep Browser Open",
-                value=bool(strtobool(os.getenv("KEEP_BROWSER_OPEN", "true"))),
+                value=str_to_bool(os.getenv("KEEP_BROWSER_OPEN", "true")),
                 info="Keep Browser Open between Tasks",
                 interactive=True
             )

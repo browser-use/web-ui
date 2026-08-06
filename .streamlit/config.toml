@@ -1,0 +1,41 @@
+[global]
+# Streamlit configuration for Job Application Agent
+
+developmentMode = false
+showWarningOnDirectExecution = false
+
+[server]
+# Server configuration
+port = 8501
+headless = true
+runOnSave = true
+allowRunOnSave = true
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 200
+
+[browser]
+# Browser configuration
+serverAddress = "localhost"
+gatherUsageStats = false
+serverPort = 8501
+
+[theme]
+# Theme configuration
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[runner]
+# Runner configuration
+magicEnabled = true
+postScriptGC = true
+fastReruns = true
+enforceSerializableSessionState = false
+
+[client]
+# Client configuration
+showErrorDetails = true
+toolbarMode = "minimal" 
