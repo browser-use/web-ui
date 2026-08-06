@@ -1,0 +1,50 @@
+{
+  "personal": {
+    "first_name": "Dinesh",
+    "last_name": "Satram",
+    "email": "dineshsatram05@gmail.com",
+    "phone": "8067025056",
+    "city": "Atlanta",
+    "state": "Georgia",
+    "address": "2591 piedmont rd",
+    "zip_code": "30324",
+    "country": "United states",
+    "linkedin_profile": ""
+  },
+  "professional": {
+    "current_position": "graduate research assistant",
+    "current_company": "georgia State University",
+    "industry": "",
+    "current_salary": 0,
+    "experience_years": 2,
+    "work_experience": "",
+    "skills": []
+  },
+  "education": {
+    "education_level": "Master's Degree",
+    "degree_field": "Computer Science",
+    "university": "Georgia State University",
+    "graduation_year": 2023
+  },
+  "preferences": {
+    "work_authorization": "F1 OPT",
+    "salary_min": 0,
+    "availability": "Immediately",
+    "remote_preference": "Remote",
+    "willing_to_relocate": "Yes",
+    "security_clearance": "None",
+    "visa_sponsorship": "No",
+    "notice_period": "Immediately"
+  },
+  "eeo_information": {
+    "gender": "Male",
+    "ethnicity": "Asian",
+    "veteran_status": "Not a veteran",
+    "disability_status": "No disability"
+  },
+  "documents": {
+    "cover_letter_template": "",
+    "resume_path": "data/documents/Dinesh_Satram_Resume_DS_A.pdf",
+    "resume_name": "Dinesh_Satram_Resume_DS_A.pdf"
+  }
+}

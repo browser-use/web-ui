@@ -632,8 +632,11 @@ async def run_agent_task(
                 last_chat_len = len(webui_manager.bu_chat_history)
                 yield update_dict
                 # Wait until response is submitted or task finishes
-                await webui_manager.bu_response_event.wait()
-
+                while (
+                        webui_manager.bu_response_event is not None
+                        and not agent_task.done()
+                ):
+                    await asyncio.sleep(0.2)
                 # Restore UI after response submitted or if task ended unexpectedly
                 if not agent_task.done():
                     yield {
@@ -1068,7 +1071,7 @@ def create_browser_use_agent_tab(webui_manager: WebuiManager):
 
     # --- Connect Event Handlers using the Wrappers --
     run_button.click(
-        fn=submit_wrapper, inputs=all_managed_components, outputs=run_tab_outputs, trigger_mode="multiple"
+        fn=submit_wrapper, inputs=all_managed_components, outputs=run_tab_outputs
     )
     user_input.submit(
         fn=submit_wrapper, inputs=all_managed_components, outputs=run_tab_outputs

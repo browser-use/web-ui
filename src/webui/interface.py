@@ -1,9 +1,10 @@
 import gradio as gr
 
 from src.webui.webui_manager import WebuiManager
-from src.webui.components.agent_settings_tab import create_agent_settings_tab
+from src.webui.components.profile_settings_tab import create_profile_settings_tab
 from src.webui.components.browser_settings_tab import create_browser_settings_tab
-from src.webui.components.browser_use_agent_tab import create_browser_use_agent_tab
+from src.webui.components.job_application_tab import create_job_application_tab
+from src.webui.components.application_history_tab import create_application_history_tab
 from src.webui.components.deep_research_agent_tab import create_deep_research_agent_tab
 from src.webui.components.load_save_config_tab import create_load_save_config_tab
 
@@ -57,39 +58,31 @@ def create_ui(theme_name="Ocean"):
     ui_manager = WebuiManager()
 
     with gr.Blocks(
-            title="Browser Use WebUI", theme=theme_map[theme_name], css=css, js=js_func,
+            title="ApplyAgent.AI", theme=theme_map[theme_name], css=css, js=js_func,
     ) as demo:
         with gr.Row():
             gr.Markdown(
                 """
-                # 🌐 Browser Use WebUI
-                ### Control your browser with AI assistance
+                # 🤖 ApplyAgent.AI
+                ### Automatically applies to jobs based on your profile
                 """,
                 elem_classes=["header-text"],
             )
 
         with gr.Tabs() as tabs:
-            with gr.TabItem("⚙️ Agent Settings"):
-                create_agent_settings_tab(ui_manager)
+            with gr.TabItem("👤 Profile Settings"):
+                create_profile_settings_tab(ui_manager)
 
             with gr.TabItem("🌐 Browser Settings"):
                 create_browser_settings_tab(ui_manager)
 
-            with gr.TabItem("🤖 Run Agent"):
-                create_browser_use_agent_tab(ui_manager)
+            with gr.TabItem("🚀 Apply to Jobs"):
+                create_job_application_tab(ui_manager)
 
-            with gr.TabItem("🎁 Agent Marketplace"):
-                gr.Markdown(
-                    """
-                    ### Agents built on Browser-Use
-                    """,
-                    elem_classes=["tab-header-text"],
-                )
-                with gr.Tabs():
-                    with gr.TabItem("Deep Research"):
-                        create_deep_research_agent_tab(ui_manager)
+            with gr.TabItem("📋 Application History"):
+                create_application_history_tab(ui_manager)
 
-            with gr.TabItem("📁 Load & Save Config"):
+            with gr.TabItem("📁 Settings & Config"):
                 create_load_save_config_tab(ui_manager)
 
     return demo

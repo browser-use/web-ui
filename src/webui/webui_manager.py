@@ -26,6 +26,10 @@ class WebuiManager:
 
         self.settings_save_dir = settings_save_dir
         os.makedirs(self.settings_save_dir, exist_ok=True)
+        
+        # Initialize agent-specific attributes
+        self.init_browser_use_agent()
+        self.init_deep_research_agent()
 
     def init_browser_use_agent(self) -> None:
         """
