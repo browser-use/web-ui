@@ -145,6 +145,48 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
   - Default VNC password: "youvncpassword"
   - Can be changed by setting `VNC_PASSWORD` in your `.env` file
 
+## Optional MCP tools
+
+In **Agent Settings**, upload a JSON file using **MCP server json** to make
+additional tools available to the browser agent. If you already use MCP servers,
+add the new entry to your existing `mcpServers` object and upload the combined
+file.
+
+### Parallel web search and page extraction
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)
+provides `web_search` and `web_fetch` without a Parallel account or API key.
+Free access is rate limited. Once configured, the agent can call these tools
+during a task. Queries, requested URLs, and any supplied objectives or context
+are sent to Parallel.
+
+The pinned MCP adapter uses stdio for this connection. Install Node.js 22 or
+newer with npm where the WebUI process runs, then save the following as
+`parallel-mcp.json` and upload it in **Agent Settings**:
+
+```json
+{
+  "mcpServers": {
+    "parallel": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.1.38", "https://search.parallel.ai/mcp", "--transport", "http-only"]
+    }
+  }
+}
+```
+
+[`mcp-remote`](https://github.com/geelen/mcp-remote) bridges stdio to the remote
+Streamable HTTP endpoint. `npx` downloads the bridge on first use, so it needs
+network access. For Docker, Node.js and npm must be available inside the
+container. Your configured language-model provider still needs its usual setup.
+
+Try a task such as “Use Parallel to find the official Python documentation for
+`asyncio`, then fetch the relevant page.” To disable these tools, remove the
+`parallel` entry from the uploaded configuration and restart the WebUI. Use
+`{"mcpServers": {}}` if there are no other servers, and reload only the updated
+configuration after restarting.
+
 ## Changelog
 - [x] **2025/01/26:** Thanks to @vvincent1234. Now browser-use-webui can combine with DeepSeek-r1 to engage in deep thinking!
 - [x] **2025/01/10:** Thanks to @casistack. Now we have Docker Setup option and also Support keep browser open between tasks.[Video tutorial demo](https://github.com/browser-use/web-ui/issues/1#issuecomment-2582511750).
