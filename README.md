@@ -150,7 +150,7 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
 In **Agent Settings**, upload a JSON file using **MCP server json** to make
 additional tools available to the browser agent. If you already use MCP servers,
 add the new entry to your existing `mcpServers` object and upload the combined
-file.
+file. Uploaded changes take effect on the next task; no WebUI restart is needed.
 
 ### Parallel web search and page extraction
 
@@ -183,9 +183,9 @@ container. Your configured language-model provider still needs its usual setup.
 
 Try a task such as “Use Parallel to find the official Python documentation for
 `asyncio`, then fetch the relevant page.” To disable these tools, remove the
-`parallel` entry from the uploaded configuration and restart the WebUI. Use
-`{"mcpServers": {}}` if there are no other servers, and reload only the updated
-configuration after restarting.
+`parallel` entry from your JSON file and upload the updated file in **Agent
+Settings** before starting the next task. Use `{"mcpServers": {}}` if there are
+no other servers.
 
 ## Changelog
 - [x] **2025/01/26:** Thanks to @vvincent1234. Now browser-use-webui can combine with DeepSeek-r1 to engage in deep thinking!
