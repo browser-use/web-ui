@@ -1,6 +1,6 @@
 browser-use==0.1.48
 pyperclip==1.9.0
-gradio==5.27.0
+gradio==6.15.1
 json-repair
 langchain-mistralai==0.2.4
 MainContentExtractor==0.0.4
