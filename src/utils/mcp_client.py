@@ -177,6 +177,8 @@ def resolve_type(prop_details: Dict[str, Any], prefix: str = "") -> Any:
                     key = f"VALUE_{i}"
             else:
                 key = f"VALUE_{i}"
+            while key in enum_dict:
+                key = f"{key}_{i}"
             enum_dict[key] = v
 
         # Only create enum if we have values
