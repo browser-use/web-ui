@@ -145,6 +145,34 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
   - Default VNC password: "youvncpassword"
   - Can be changed by setting `VNC_PASSWORD` in your `.env` file
 
+### Option 3: Railway / PaaS deployment and n8n integration
+
+The web-ui listens on `$PORT` when it is set, so platforms that expose a single port (Railway, Render, Fly.io, Heroku) route to it without extra configuration.
+
+1. Deploy this repository from its `Dockerfile`.
+2. Set your LLM keys (e.g. `OPENAI_API_KEY`), plus:
+   - `ENABLE_BRIDGE_API=true` to serve the REST bridge at `/api/v1`
+   - `BRIDGE_API_TOKEN=<a long random string>` to require `Authorization: Bearer <token>`
+3. Generate a public domain for the service. The Gradio UI is at `/`, and the bridge is at `/api/v1`.
+
+To drive it from n8n with the [`n8n-nodes-browser-use`](https://www.npmjs.com/package/n8n-nodes-browser-use) community node:
+
+1. Create a **Browser Use Local Bridge API** credential.
+   - **URL**: `https://<your-app>.up.railway.app/api/v1` (include `/api/v1`)
+   - **Authentication Token**: the value of `BRIDGE_API_TOKEN`
+2. In the Browser Use node, choose **Connection Type → Local Bridge**. **Run Task** returns a task `id`. Poll **Get Task Status** until `status` is `finished`, `failed` or `stopped`, and then read `output`.
+
+If both services run in the same Railway project, you can use the private URL instead (`http://<service>.railway.internal:<PORT>/api/v1`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/ping` | Health check |
+| POST | `/api/v1/run-task` | Body: `{"task": "...", "ai_provider": "openai", "model_name": "gpt-4o", "headful": false}` |
+| GET | `/api/v1/task/{id}` / `/api/v1/task/{id}/status` | Task details / status (`created`, `running`, `paused`, `finished`, `failed`, `stopped`) |
+| GET | `/api/v1/task/{id}/media?type=screenshot\|gif` | Latest screenshot (base64) or the run's GIF recording |
+| PUT | `/api/v1/stop-task/{id}`, `/pause-task/{id}`, `/resume-task/{id}` | Control a running task |
+| GET | `/api/v1/tasks?limit=50` | List recent tasks |
+
 ## Changelog
 - [x] **2025/01/26:** Thanks to @vvincent1234. Now browser-use-webui can combine with DeepSeek-r1 to engage in deep thinking!
 - [x] **2025/01/10:** Thanks to @casistack. Now we have Docker Setup option and also Support keep browser open between tasks.[Video tutorial demo](https://github.com/browser-use/web-ui/issues/1#issuecomment-2582511750).
