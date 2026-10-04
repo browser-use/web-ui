@@ -19,7 +19,6 @@ single exposed port (e.g. Railway's $PORT) serves both.
 """
 
 import asyncio
-import base64
 import logging
 import os
 import uuid
