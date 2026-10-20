@@ -1,4 +1,4 @@
-MINIMAX_MODELS = ["MiniMax-M3", "MiniMax-M2.7"]
+MINIMAX_MODELS = ["MiniMax-M3.1-Flash", "MiniMax-M3"]
 
 MINIMAX_PROVIDER_CONFIGS = {
     "minimax": {
