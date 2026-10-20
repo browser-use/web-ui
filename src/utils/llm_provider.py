@@ -156,8 +156,10 @@ def get_llm_model(provider: str, **kwargs):
     :param kwargs:
     :return:
     """
+    provider_config = config.MINIMAX_PROVIDER_CONFIGS.get(provider)
+
     if provider not in ["ollama", "bedrock"]:
-        env_var = f"{provider.upper()}_API_KEY"
+        env_var = "MINIMAX_API_KEY" if provider_config else f"{provider.upper()}_API_KEY"
         api_key = kwargs.get("api_key", "") or os.getenv(env_var, "")
         if not api_key:
             provider_display = config.PROVIDER_DISPLAY_NAMES.get(provider, provider.upper())
@@ -165,7 +167,27 @@ def get_llm_model(provider: str, **kwargs):
             raise ValueError(error_msg)
         kwargs["api_key"] = api_key
 
-    if provider == "anthropic":
+    if provider_config:
+        base_url = kwargs.get("base_url", "") or os.getenv(
+            provider_config["endpoint_env"], provider_config["base_url"]
+        )
+        model_name = kwargs.get("model_name", config.MINIMAX_MODELS[0])
+
+        if provider_config["protocol"] == "anthropic":
+            return ChatAnthropic(
+                model=model_name,
+                temperature=kwargs.get("temperature", 0.0),
+                base_url=base_url,
+                api_key=api_key,
+            )
+
+        return ChatOpenAI(
+            model=model_name,
+            temperature=kwargs.get("temperature", 0.0),
+            base_url=base_url,
+            api_key=api_key,
+        )
+    elif provider == "anthropic":
         if not kwargs.get("base_url", ""):
             base_url = "https://api.anthropic.com"
         else:

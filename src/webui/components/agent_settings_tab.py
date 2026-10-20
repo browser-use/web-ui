@@ -19,7 +19,7 @@ def update_model_dropdown(llm_provider):
     # Use predefined models for the selected provider
     if llm_provider in config.model_names:
         return gr.Dropdown(choices=config.model_names[llm_provider], value=config.model_names[llm_provider][0],
-                           interactive=True)
+                           interactive=True, allow_custom_value=True)
     else:
         return gr.Dropdown(choices=[], value="", interactive=True, allow_custom_value=True)
 
@@ -241,7 +241,8 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
         inputs=llm_provider,
         outputs=ollama_num_ctx
     )
-    llm_provider.change(
+    # Loading saved settings must not reset an explicit model selection.
+    llm_provider.input(
         lambda provider: update_model_dropdown(provider),
         inputs=[llm_provider],
         outputs=[llm_model_name]
@@ -251,7 +252,7 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
         inputs=[planner_llm_provider],
         outputs=[planner_ollama_num_ctx]
     )
-    planner_llm_provider.change(
+    planner_llm_provider.input(
         lambda provider: update_model_dropdown(provider),
         inputs=[planner_llm_provider],
         outputs=[planner_llm_model_name]

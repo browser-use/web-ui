@@ -17,6 +17,7 @@ from src.browser.custom_browser import CustomBrowser
 from src.browser.custom_context import CustomBrowserContext
 from src.controller.custom_controller import CustomController
 from src.agent.deep_research.deep_research_agent import DeepResearchAgent
+from src.utils import config
 
 
 class WebuiManager:
@@ -105,7 +106,15 @@ class WebuiManager:
         for comp_id, comp_val in ui_settings.items():
             if comp_id in self.id_to_component:
                 comp = self.id_to_component[comp_id]
-                if comp.__class__.__name__ == "Chatbot":
+                if comp_id in ("agent_settings.llm_model_name", "agent_settings.planner_llm_model_name"):
+                    provider_id = comp_id.replace("llm_model_name", "llm_provider")
+                    provider = ui_settings.get(provider_id)
+                    update_components[comp] = comp.__class__(
+                        choices=config.model_names.get(provider, []),
+                        value=comp_val,
+                        allow_custom_value=True,
+                    )
+                elif comp.__class__.__name__ == "Chatbot":
                     update_components[comp] = comp.__class__(value=comp_val, type="messages")
                 else:
                     update_components[comp] = comp.__class__(value=comp_val)
