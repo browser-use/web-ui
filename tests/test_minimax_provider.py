@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from src.utils import config, llm_provider
-from src.webui.components import agent_settings_tab
+from src.webui.components import agent_settings_tab, browser_use_agent_tab
 from src.webui.components.browser_use_agent_tab import _initialize_llm as browser_llm
 from src.webui.components.deep_research_agent_tab import _initialize_llm as research_llm
 from src.webui.webui_manager import WebuiManager
@@ -137,6 +137,7 @@ def test_saved_agent_and_planner_models_survive_loading(
     manager = WebuiManager(settings_save_dir=str(tmp_path))
     with gr.Blocks() as blocks:
         agent_settings_tab.create_agent_settings_tab(manager)
+        browser_use_agent_tab.create_browser_use_agent_tab(manager)
         manager.add_components("load_save_config", {"config_status": gr.Textbox()})
     for prefix in ("", "planner_"):
         provider_component = manager.get_component_by_id(f"agent_settings.{prefix}llm_provider")
@@ -151,13 +152,42 @@ def test_saved_agent_and_planner_models_survive_loading(
             assert model_component.value == config.model_names[initial_provider][0]
         path = manager.save_config({provider_component: provider, model_component: saved_model})
         updates = list(manager.load_config(path))[-1]
+        restored_provider = updates[provider_component].value
         restored = updates[model_component].value
+        assert restored_provider == provider
         assert restored == saved_model
         assert updates[model_component].choices == [(name, name) for name in EXPECTED_MODELS]
         assert updates[model_component].allow_custom_value
-        model = asyncio.run(browser_llm(provider, restored, 0.6, "", "", 16000))
         captured_requests.clear()
-        asyncio.run(model.ainvoke("hello"))
+        if not prefix:
+            model = asyncio.run(browser_llm(restored_provider, restored, 0.6, "", "", 16000))
+            asyncio.run(model.ainvoke("hello"))
+        else:
+            class PlannerRequestCaptured(Exception):
+                pass
+
+            async def initialize_planner(*args, **kwargs):
+                assert args[:2] == (restored_provider, restored)
+                model = await browser_llm(*args, **kwargs)
+                await model.ainvoke("hello")
+                # Stop after the real planner request, before launching a browser.
+                raise PlannerRequestCaptured
+
+            monkeypatch.setattr(browser_use_agent_tab, "_initialize_llm", initialize_planner)
+            components = {comp: getattr(comp, "value", None) for comp in manager.get_components()}
+            components.update({comp: update.value for comp, update in updates.items()})
+            components[manager.get_component_by_id("browser_use_agent.user_input")] = "hello"
+
+            async def run_planner_setup():
+                stream = browser_use_agent_tab.run_agent_task(manager, components)
+                try:
+                    await anext(stream)  # Initial running-state update.
+                    with pytest.raises(PlannerRequestCaptured):
+                        await anext(stream)
+                finally:
+                    await stream.aclose()
+
+            asyncio.run(run_planner_setup())
         assert_request(captured_requests, provider, saved_model)
 
 
