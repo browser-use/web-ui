@@ -152,7 +152,7 @@ def create_browser_settings_tab(webui_manager: WebuiManager):
     webui_manager.add_components("browser_settings", tab_components)
 
     async def close_wrapper():
-        """Wrapper for handle_clear."""
+        """Wrapper for close_browser."""
         await close_browser(webui_manager)
 
     headless.change(close_wrapper)

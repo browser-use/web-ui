@@ -49,7 +49,7 @@ class BrowserUseAgent(Agent):
             self, max_steps: int = 100, on_step_start: AgentHookFunc | None = None,
             on_step_end: AgentHookFunc | None = None
     ) -> AgentHistoryList:
-        """Execute the task with maximum number of steps"""
+        """Execute the task with a maximum number of steps"""
 
         loop = asyncio.get_event_loop()
 
