@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "webui",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "webui.py", "--ip", "127.0.0.1", "--port", "7788"],
+      "port": 7788
+    }
+  ]
+}

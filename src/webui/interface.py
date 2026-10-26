@@ -6,6 +6,7 @@ from src.webui.components.browser_settings_tab import create_browser_settings_ta
 from src.webui.components.browser_use_agent_tab import create_browser_use_agent_tab
 from src.webui.components.deep_research_agent_tab import create_deep_research_agent_tab
 from src.webui.components.load_save_config_tab import create_load_save_config_tab
+from src.ui import build_api_config_tab, build_memory_tab, build_qa_tab
 
 theme_map = {
     "Default": gr.themes.Default(),
@@ -88,6 +89,15 @@ def create_ui(theme_name="Ocean"):
                 with gr.Tabs():
                     with gr.TabItem("Deep Research"):
                         create_deep_research_agent_tab(ui_manager)
+
+            with gr.TabItem("🔌 API Config"):
+                build_api_config_tab()
+
+            with gr.TabItem("🧠 Memory"):
+                build_memory_tab()
+
+            with gr.TabItem("🤖 Agentic Q&A"):
+                build_qa_tab()
 
             with gr.TabItem("📁 Load & Save Config"):
                 create_load_save_config_tab(ui_manager)
