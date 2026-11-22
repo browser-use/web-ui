@@ -91,6 +91,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
 
     # Store base save dir for stop handler
     webui_manager.dr_save_dir = base_save_dir
+    webui_manager.dr_stop_requested = False
     os.makedirs(base_save_dir, exist_ok=True)
 
     # --- 2. Initial UI Update ---
@@ -131,6 +132,16 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
             llm_provider_name, llm_model_name, llm_temperature, llm_base_url, llm_api_key,
             ollama_num_ctx if llm_provider_name == "ollama" else None
         )
+
+        if webui_manager.dr_stop_requested:
+            logger.info("Deep Research cancelled before agent startup.")
+            yield {
+                markdown_display_comp: gr.update(
+                    value="# Research Cancelled\n\nResearch was stopped before the agent started."
+                )
+            }
+            return
+
         if not llm:
             raise ValueError("LLM Initialization failed. Please check Agent Settings.")
 
@@ -182,7 +193,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         else:
             logger.info(f"Agent started with Task ID: {running_task_id}")
 
-        webui_manager.dr_task_id = running_task_id  # Store for stop handler
+        webui_manager.dr_agent_task_id = running_task_id  # Store for stop handler
 
         # --- 6. Monitor Progress via research_plan.md ---
         if running_task_id:
@@ -236,7 +247,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         # Try to get task ID from result if not known before
         if not running_task_id and final_result_dict and 'task_id' in final_result_dict:
             running_task_id = final_result_dict['task_id']
-            webui_manager.dr_task_id = running_task_id
+            webui_manager.dr_agent_task_id = running_task_id
             task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
             report_file_path = os.path.join(task_specific_dir, "report.md")
             logger.info(f"Task ID confirmed from result: {running_task_id}")
@@ -275,7 +286,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
     finally:
         # --- 8. Final UI Reset ---
         webui_manager.dr_current_task = None  # Clear task reference
-        webui_manager.dr_task_id = None  # Clear running task ID
+        webui_manager.dr_agent_task_id = None  # Clear running task ID
 
         yield {
             start_button_comp: gr.update(value="▶️ Run", interactive=True),
@@ -293,9 +304,10 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
 async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any]:
     """Handles the Stop button click."""
     logger.info("Stop button clicked for Deep Research.")
+    webui_manager.dr_stop_requested = True
     agent = webui_manager.dr_agent
     task = webui_manager.dr_current_task
-    task_id = webui_manager.dr_task_id
+    task_id = webui_manager.dr_agent_task_id
     base_save_dir = webui_manager.dr_save_dir
 
     stop_button_comp = webui_manager.get_component_by_id("deep_research_agent.stop_button")
@@ -344,7 +356,7 @@ async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any
         logger.warning("Stop clicked but no active research task found.")
         # Reset UI state just in case
         final_update = {
-            start_button_comp: gr.update(interactive=True),
+            start_button_comp: gr.update(interactive=False),
             stop_button_comp: gr.update(interactive=False),
             webui_manager.get_component_by_id("deep_research_agent.research_task"): gr.update(interactive=True),
             webui_manager.get_component_by_id("deep_research_agent.resume_task_id"): gr.update(interactive=True),
