@@ -227,7 +227,7 @@ async def _ask_assistant_callback(
     """Callback triggered by the agent's ask_for_assistant action."""
     logger.info("Agent requires assistance. Waiting for user input.")
 
-    if not hasattr(webui_manager, "_chat_history"):
+    if not hasattr(webui_manager, "bu_chat_history"):
         logger.error("Chat history not found in webui_manager during ask_assistant!")
         return {"response": "Internal Error: Cannot display help request."}
 
