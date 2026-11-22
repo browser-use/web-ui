@@ -49,6 +49,8 @@ class WebuiManager:
         self.dr_current_task = None
         self.dr_agent_task_id: Optional[str] = None
         self.dr_save_dir: Optional[str] = None
+        self.dr_stop_requested: bool = False
+        self.dr_initializing: bool = False
 
     def add_components(self, tab_name: str, components_dict: dict[str, "Component"]) -> None:
         """

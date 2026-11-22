@@ -24,7 +24,8 @@ async def _initialize_llm(provider: Optional[str], model_name: Optional[str], te
     try:
         logger.info(f"Initializing LLM: Provider={provider}, Model={model_name}, Temp={temperature}")
         # Use your actual LLM provider logic here
-        llm = llm_provider.get_llm_model(
+        llm = await asyncio.to_thread(
+            llm_provider.get_llm_model,
             provider=provider,
             model_name=model_name,
             temperature=temperature,
@@ -92,6 +93,8 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
     # Store base save dir for stop handler
     webui_manager.dr_save_dir = base_save_dir
     os.makedirs(base_save_dir, exist_ok=True)
+    webui_manager.dr_stop_requested = False
+    webui_manager.dr_initializing = True
 
     # --- 2. Initial UI Update ---
     yield {
@@ -131,6 +134,16 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
             llm_provider_name, llm_model_name, llm_temperature, llm_base_url, llm_api_key,
             ollama_num_ctx if llm_provider_name == "ollama" else None
         )
+
+        if webui_manager.dr_stop_requested:
+            logger.info("Deep Research cancelled before agent startup.")
+            yield {
+                markdown_display_comp: gr.update(
+                    value="# Research Cancelled\n\nResearch was stopped before the agent started."
+                )
+            }
+            return
+
         if not llm:
             raise ValueError("LLM Initialization failed. Please check Agent Settings.")
 
@@ -165,7 +178,31 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         agent_task = asyncio.create_task(agent_run_coro)
         webui_manager.dr_current_task = agent_task
 
-        # Wait briefly for the agent to start and potentially create the task ID/folder
+        # Allow the agent to initialize its task ID and stop event.
+        await asyncio.sleep(0)
+
+        if agent_task.done():
+            result = await agent_task
+            raise RuntimeError(
+                f"Deep Research agent exited before startup completed: {result}"
+            )
+        if (
+            not webui_manager.dr_agent.current_task_id
+            or webui_manager.dr_agent.stop_event is None
+        ):
+            raise RuntimeError(
+                "Deep Research agent failed to initialize its stop state."
+            )
+
+        # Handle Stop requests received while the agent was starting.
+        if webui_manager.dr_stop_requested:
+            logger.info("Processing pending Deep Research stop request.")
+            await webui_manager.dr_agent.stop()
+
+        # Initialization is complete; Stop handler can now signal the agent directly.
+        webui_manager.dr_initializing = False
+
+        # Wait briefly for the agent to create the task ID/folder.
         await asyncio.sleep(1.0)
 
         # Determine the actual task ID being used (agent sets this)
@@ -182,7 +219,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         else:
             logger.info(f"Agent started with Task ID: {running_task_id}")
 
-        webui_manager.dr_task_id = running_task_id  # Store for stop handler
+        webui_manager.dr_agent_task_id = running_task_id  # Store for stop handler
 
         # --- 6. Monitor Progress via research_plan.md ---
         if running_task_id:
@@ -236,7 +273,7 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         # Try to get task ID from result if not known before
         if not running_task_id and final_result_dict and 'task_id' in final_result_dict:
             running_task_id = final_result_dict['task_id']
-            webui_manager.dr_task_id = running_task_id
+            webui_manager.dr_agent_task_id = running_task_id
             task_specific_dir = os.path.join(base_save_dir, str(running_task_id))
             report_file_path = os.path.join(task_specific_dir, "report.md")
             logger.info(f"Task ID confirmed from result: {running_task_id}")
@@ -275,7 +312,8 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
     finally:
         # --- 8. Final UI Reset ---
         webui_manager.dr_current_task = None  # Clear task reference
-        webui_manager.dr_task_id = None  # Clear running task ID
+        webui_manager.dr_agent_task_id = None  # Clear running task ID
+        webui_manager.dr_initializing = False
 
         yield {
             start_button_comp: gr.update(value="▶️ Run", interactive=True),
@@ -295,7 +333,7 @@ async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any
     logger.info("Stop button clicked for Deep Research.")
     agent = webui_manager.dr_agent
     task = webui_manager.dr_current_task
-    task_id = webui_manager.dr_task_id
+    task_id = webui_manager.dr_agent_task_id
     base_save_dir = webui_manager.dr_save_dir
 
     stop_button_comp = webui_manager.get_component_by_id("deep_research_agent.stop_button")
@@ -307,49 +345,64 @@ async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any
         stop_button_comp: gr.update(interactive=False, value="⏹️ Stopping...")
     }
 
-    if agent and task and not task.done():
+    if webui_manager.dr_initializing:
+        logger.info("Stop requested while Deep Research is initializing.")
+        webui_manager.dr_stop_requested = True
+        final_update = {
+            start_button_comp: gr.update(interactive=False),
+            stop_button_comp: gr.update(interactive=False),
+            markdown_display_comp: gr.update(
+                value="# Stopping Research\n\nCancelling before the agent starts..."
+            ),
+        }
+
+    elif (
+        agent
+        and task
+        and not task.done()
+    ):
+        webui_manager.dr_stop_requested = True
         logger.info("Signalling DeepResearchAgent to stop.")
         try:
-            # Assuming stop is synchronous or sets a flag quickly
             await agent.stop()
         except Exception as e:
             logger.error(f"Error calling agent.stop(): {e}")
 
-        # The run_deep_research loop should detect the stop and exit.
-        # We yield an intermediate "Stopping..." state. The final reset is done by run_deep_research.
+        await asyncio.sleep(1.5)
 
-        # Try to show the final report if available after stopping
-        await asyncio.sleep(1.5)  # Give agent a moment to write final files potentially
         report_file_path = None
         if task_id and base_save_dir:
-            report_file_path = os.path.join(base_save_dir, str(task_id), "report.md")
+            report_file_path = os.path.join(
+                base_save_dir, str(task_id), "report.md"
+            )
 
         if report_file_path and os.path.exists(report_file_path):
             report_content = _read_file_safe(report_file_path)
             if report_content:
                 final_update[markdown_display_comp] = gr.update(
-                    value=report_content + "\n\n---\n*Research stopped by user.*")
-                final_update[markdown_download_comp] = gr.File(value=report_file_path, label=f"Report ({task_id}.md)",
-                                                               interactive=True)
+                    value=report_content + "\n\n---\n*Research stopped by user.*"
+                )
+                final_update[markdown_download_comp] = gr.File(
+                    value=report_file_path,
+                    label=f"Report ({task_id}.md)",
+                    interactive=True
+                )
             else:
                 final_update[markdown_display_comp] = gr.update(
-                    value="# Research Stopped\n\n*Error reading final report file after stop.*")
+                    value="# Research Stopped\n\n*Error reading final report file after stop.*"
+                )
         else:
-            final_update[markdown_display_comp] = gr.update(value="# Research Stopped by User")
+            final_update[markdown_display_comp] = gr.update(
+                value="# Research Stopped by User"
+            )
 
-        # Keep start button disabled, run_deep_research finally block will re-enable it.
         final_update[start_button_comp] = gr.update(interactive=False)
 
     else:
-        logger.warning("Stop clicked but no active research task found.")
-        # Reset UI state just in case
+        logger.warning("Stop clicked while Deep Research is idle.")
         final_update = {
             start_button_comp: gr.update(interactive=True),
             stop_button_comp: gr.update(interactive=False),
-            webui_manager.get_component_by_id("deep_research_agent.research_task"): gr.update(interactive=True),
-            webui_manager.get_component_by_id("deep_research_agent.resume_task_id"): gr.update(interactive=True),
-            webui_manager.get_component_by_id("deep_research_agent.max_iteration"): gr.update(interactive=True),
-            webui_manager.get_component_by_id("deep_research_agent.max_query"): gr.update(interactive=True),
         }
 
     return final_update
