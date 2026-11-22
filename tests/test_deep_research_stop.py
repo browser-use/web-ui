@@ -158,3 +158,51 @@ def test_stop_during_agent_startup_defers_stop_signal():
                 pass
 
     asyncio.run(run_test())
+
+
+def test_stop_during_agent_cleanup_keeps_run_button_disabled(monkeypatch):
+    async def run_test():
+        agent_stop = AsyncMock()
+
+        agent = SimpleNamespace(
+            current_task_id=None,
+            stop_event=None,
+            stop=agent_stop,
+        )
+
+        task = asyncio.create_task(asyncio.Event().wait())
+
+        manager = SimpleNamespace(
+            dr_agent=agent,
+            dr_current_task=task,
+            dr_agent_task_id=None,
+            dr_save_dir=None,
+            dr_stop_requested=False,
+            dr_initializing=False,
+            get_component_by_id=lambda component_id: component_id,
+        )
+
+        monkeypatch.setattr(dr_tab.asyncio, "sleep", AsyncMock())
+
+        try:
+            result = await dr_tab.stop_deep_research(manager)
+
+            assert manager.dr_stop_requested is True
+            agent_stop.assert_awaited_once()
+
+            assert result[
+                "deep_research_agent.start_button"
+            ]["interactive"] is False
+
+            assert result[
+                "deep_research_agent.stop_button"
+            ]["interactive"] is False
+
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(run_test())

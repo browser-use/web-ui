@@ -360,8 +360,6 @@ async def stop_deep_research(webui_manager: WebuiManager) -> Dict[Component, Any
         agent
         and task
         and not task.done()
-        and agent.current_task_id
-        and agent.stop_event is not None
     ):
         webui_manager.dr_stop_requested = True
         logger.info("Signalling DeepResearchAgent to stop.")
