@@ -13,6 +13,7 @@ def test_deep_research_agent_task_id_initialized():
     assert hasattr(manager, "dr_agent_task_id")
     assert manager.dr_agent_task_id is None
     assert manager.dr_stop_requested is False
+    assert manager.dr_initializing is False
 
 
 def test_stop_during_llm_initialization_prevents_agent_start(monkeypatch):
@@ -23,6 +24,7 @@ def test_stop_during_llm_initialization_prevents_agent_start(monkeypatch):
             dr_agent_task_id=None,
             dr_save_dir=None,
             dr_stop_requested=False,
+            dr_initializing=False,
             id_to_component={},
             get_component_by_id=lambda component_id: component_id,
         )
@@ -96,3 +98,22 @@ def test_stop_during_llm_initialization_prevents_agent_start(monkeypatch):
             pass
 
     asyncio.run(run_test())
+
+
+
+def test_idle_stop_keeps_run_button_enabled():
+    manager = SimpleNamespace(
+        dr_agent=None,
+        dr_current_task=None,
+        dr_agent_task_id=None,
+        dr_save_dir=None,
+        dr_stop_requested=False,
+        dr_initializing=False,
+        get_component_by_id=lambda component_id: component_id,
+    )
+
+    result = asyncio.run(dr_tab.stop_deep_research(manager))
+
+    assert result["deep_research_agent.start_button"]["interactive"] is True
+    assert result["deep_research_agent.stop_button"]["interactive"] is False
+    assert manager.dr_stop_requested is False
